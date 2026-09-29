@@ -1,0 +1,16 @@
+# --- Generator (Layer 1, current) ---
+numpy>=2.0
+
+# --- Postgres (add when wiring postgres_writer.py) ---
+# psycopg2-binary>=2.9
+# SQLAlchemy>=2.0
+
+# --- LLM prose (add when reaching docs/prose.py) ---
+# ollama>=0.3
+
+# --- Later layers (uncomment when you reach them) ---
+# qdrant-client>=1.7
+# neo4j>=5.0
+# langgraph>=0.2
+# fastapi>=0.110
+# uvicorn>=0.29
