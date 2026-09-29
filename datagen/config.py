@@ -89,3 +89,9 @@ PROSE_MAX_RETRIES = 3                                 # regenerate on validation
 
 # Warehouse capacity threshold: warehouses at/below this are "tight" (RC-04 fires here)
 WAREHOUSE_CAPACITY_TIGHT_THRESHOLD = 500
+
+# --- Postgres (source-of-truth persistence) ---
+import os
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", "postgresql://yassine:devpass@localhost:5432/meridian"
+)

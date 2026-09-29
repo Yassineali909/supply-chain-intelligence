@@ -28,7 +28,7 @@ from datagen.stage7_incidents import build_incidents
 from datagen.stage8_performance import build_performance
 
 
-def generate(seed: int = config.SEED, use_llm: bool = True) -> dict:
+def generate(seed: int = config.SEED, use_llm: bool = True, persist: bool = False) -> dict:
     """
     Execute the structured stages and return the full in-memory dataset dict.
     (Persistence + projections are layered on separately.)
@@ -53,7 +53,11 @@ def generate(seed: int = config.SEED, use_llm: bool = True) -> dict:
         **performance,
     }
 
-    # --- persist source of truth (TODO: writers/postgres_writer.py) ---
+    # --- persist source of truth to Postgres (projection of the in-memory truth) ---
+    if persist:
+        from datagen.writers.postgres_writer import write as write_postgres
+        write_postgres(dataset)
+
     # STAGE 9  — graph projection      (TODO: graph_projection.py)
     # STAGE 10 — document skeletons    (TODO: docs/skeletons.py)
     # STAGE 11 — document prose+validate (TODO: docs/prose.py, docs/validate.py)
@@ -99,9 +103,11 @@ def _cli() -> None:
     parser.add_argument("--seed", type=int, default=config.SEED)
     parser.add_argument("--no-llm", action="store_true",
                         help="skip LLM prose; emit skeleton text (docs stage, later)")
+    parser.add_argument("--persist", action="store_true",
+                        help="write the dataset to Postgres (config.DATABASE_URL)")
     args = parser.parse_args()
 
-    dataset = generate(seed=args.seed, use_llm=not args.no_llm)
+    dataset = generate(seed=args.seed, use_llm=not args.no_llm, persist=args.persist)
     _summary(dataset)
 
 
