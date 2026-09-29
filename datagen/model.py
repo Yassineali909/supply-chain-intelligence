@@ -210,3 +210,17 @@ class GeneratedDocument:
     text: str
     llm_generated: bool             # False if produced by the --no-llm fallback
     validation_passed: bool
+
+
+@dataclass
+class SupplierPerformance:
+    """
+    STAGE 8 — derived/materialized rollup. Pure aggregation of stages 3-7; must be
+    reconstructable by a single GROUP BY over the base tables. Never an independent fact.
+    """
+    supplier_id: int
+    period_month: date          # first-of-month bucket
+    orders_count: int
+    on_time_count: int
+    avg_delay_days: float
+    sla_breach_count: int
