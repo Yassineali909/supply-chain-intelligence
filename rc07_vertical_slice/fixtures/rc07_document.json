@@ -1,0 +1,13 @@
+{
+  "doc_id": "DOC-FIXTURE-RC07",
+  "doc_type": "incident_report",
+  "text": "Incident INC-042: Shipment SH-4921 was held at PORT-ADR for customs clearance, resulting in an 8-day arrival delay. The customs hold was the documented cause of the delay.",
+  "metadata": {
+    "shipment_code": "SH-4921",
+    "incident_code": "INC-042",
+    "port_code": "PORT-ADR",
+    "root_cause_id": "RC-07",
+    "period_quarter": "2026-Q1",
+    "relevance": "DIRECT"
+  }
+}

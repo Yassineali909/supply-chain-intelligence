@@ -1,0 +1,5 @@
+pydantic>=2.7,<3
+SQLAlchemy>=2.0,<3
+psycopg[binary]>=3.2,<4
+langgraph>=0.2,<2
+langchain-core>=0.3,<2
