@@ -13,12 +13,25 @@ from agent_contract import (
 )
 
 
-_DELAY_RE = re.compile(r"\b(\d+(?:\.\d+)?)\s+days?\s+(?:late|of\s+delay)\b", re.IGNORECASE)
+# Match a delay figure in several phrasings so the verifier and any evidence-fact
+# wording agree: "8 days late", "8 days of delay", "delay 8 days", "delay of 8 days",
+# "delay_days=8", "8-day delay".
+_DELAY_RE = re.compile(
+    r"\b(?:delay(?:_days)?\s*(?:of|=|:)?\s*(\d+(?:\.\d+)?)"
+    r"|(\d+(?:\.\d+)?)\s*-?\s*days?\s+(?:late|of\s+delay|delay)"
+    r"|(\d+(?:\.\d+)?)\s+days?\b)",
+    re.IGNORECASE,
+)
 
 
 def _extract_delay_days(text: str) -> float | None:
     match = _DELAY_RE.search(text)
-    return float(match.group(1)) if match else None
+    if not match:
+        return None
+    for g in match.groups():
+        if g is not None:
+            return float(g)
+    return None
 
 
 def _status(value: bool) -> str:
