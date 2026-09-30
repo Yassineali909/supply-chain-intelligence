@@ -93,5 +93,5 @@ WAREHOUSE_CAPACITY_TIGHT_THRESHOLD = 500
 # --- Postgres (source-of-truth persistence) ---
 import os
 DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://yassine:devpass@localhost:5432/meridian"
+    "DATABASE_URL", "postgresql://meridian_user:CHANGE_ME@localhost:5432/meridian"
 )
