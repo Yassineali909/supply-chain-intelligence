@@ -1,15 +1,13 @@
 """
-STAGE 11b — deterministic validation gate over generated prose.
+STAGE 11b — deterministic validation gate over generated text.
 
-For each document: assert every required code/date/number appears; assert NO foreign
-codes appear (regex for S\\d+, SH-\\d+, INC-\\d+, PO-\\d+, DL-\\d+, INV-\\d+, C\\d+ that
-don't belong to this skeleton). On failure, prose.py regenerates up to
-config.PROSE_MAX_RETRIES, then falls back to skeleton text. This is what lets you trust
-LLM prose without trusting the LLM.
+Passes iff every required code/date/number appears AND no foreign codes (matching a
+known pattern but not in required_codes) appear — catching an invented citation.
 """
 from __future__ import annotations
+
 import re
-import datagen.config as config
+
 from datagen.model import GeneratedDocument
 
 CODE_PATTERNS = {
@@ -19,10 +17,38 @@ CODE_PATTERNS = {
     "po": re.compile(r"\bPO-\d+\b"),
     "delivery": re.compile(r"\bDL-\d+\b"),
     "invoice": re.compile(r"\bINV-\d+\b"),
-    "customer": re.compile(r"\bC\d{2,}\b"),
+    "port": re.compile(r"\bPORT-[A-Z]+\b"),
+    "warehouse": re.compile(r"\bWH-\d+\b"),
+    "carrier": re.compile(r"\bCR\d+\b"),
 }
 
 
 def validate(doc: GeneratedDocument) -> bool:
-    """Return True iff required facts present AND no foreign codes leaked."""
-    raise NotImplementedError
+    text = doc.text
+    skel = doc.skeleton
+    required = set(skel.required_codes)
+
+    for code in skel.required_codes:
+        if code not in text:
+            return False
+    for d in skel.required_dates:
+        if d not in text:
+            return False
+    for n in skel.required_numbers:
+        if str(n) not in text:
+            return False
+
+    found = set()
+    for pat in CODE_PATTERNS.values():
+        found.update(pat.findall(text))
+    if found - required:
+        return False
+
+    return True
+
+
+def render_and_validate(skeleton, use_llm=False):
+    from datagen.docs.prose import render
+    doc = render(skeleton, use_llm=use_llm)
+    doc.validation_passed = validate(doc)
+    return doc

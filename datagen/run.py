@@ -28,7 +28,8 @@ from datagen.stage7_incidents import build_incidents
 from datagen.stage8_performance import build_performance
 
 
-def generate(seed: int = config.SEED, use_llm: bool = True, persist: bool = False) -> dict:
+def generate(seed: int = config.SEED, use_llm: bool = True, persist: bool = False,
+             write_docs: bool = False, use_llm_docs: bool = False) -> dict:
     """
     Execute the structured stages and return the full in-memory dataset dict.
     (Persistence + projections are layered on separately.)
@@ -52,6 +53,16 @@ def generate(seed: int = config.SEED, use_llm: bool = True, persist: bool = Fals
         **incidents,
         **performance,
     }
+
+    # --- STAGE 10-11: documents (deterministic skeleton -> text -> validate -> write) ---
+    if write_docs:
+        from datagen.docs.skeletons import build_skeletons
+        from datagen.docs.validate import render_and_validate
+        from datagen.writers.document_writer import write_documents
+        skels = build_skeletons(dataset)
+        docs = [render_and_validate(s, use_llm=use_llm_docs) for s in skels]
+        write_documents(docs, str(config.DOCS_OUT_DIR) if hasattr(config, "DOCS_OUT_DIR")
+                        else "artifacts/documents")
 
     # --- persist source of truth to Postgres (projection of the in-memory truth) ---
     if persist:
@@ -105,9 +116,12 @@ def _cli() -> None:
                         help="skip LLM prose; emit skeleton text (docs stage, later)")
     parser.add_argument("--persist", action="store_true",
                         help="write the dataset to Postgres (config.DATABASE_URL)")
+    parser.add_argument("--docs", action="store_true",
+                        help="generate + write documents to artifacts/documents/")
     args = parser.parse_args()
 
-    dataset = generate(seed=args.seed, use_llm=not args.no_llm, persist=args.persist)
+    dataset = generate(seed=args.seed, use_llm=not args.no_llm, persist=args.persist,
+                       write_docs=args.docs, use_llm_docs=False)
     _summary(dataset)
 
 
