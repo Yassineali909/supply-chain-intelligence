@@ -1,0 +1,42 @@
+[
+  {
+    "id": "HO-supplier-noentity",
+    "question": "Which of our suppliers is the biggest problem?",
+    "expected_type": "supplier",
+    "expected_outcome": "SUPPORTED",
+    "note": "Supplier intent, NO S-code and NO 'late' keyword. Rides entirely on LLM classification; pattern fallback cannot catch it.",
+    "hard_because": "no entity signal for the deterministic fallback"
+  },
+  {
+    "id": "HO-shipment-rephrase",
+    "question": "Did SH-6968 arrive on time?",
+    "expected_type": "shipment",
+    "expected_outcome": "SUPPORTED",
+    "note": "Shipment question, 'arrive on time' phrasing instead of 'what happened'. SH- pattern should still catch it.",
+    "hard_because": "different verb phrasing than the dev set"
+  },
+  {
+    "id": "HO-supplier-named",
+    "question": "How is supplier S07's delivery record compared to the rest?",
+    "expected_type": "supplier",
+    "expected_outcome": "SUPPORTED",
+    "note": "Supplier comparison, different phrasing ('delivery record compared to the rest').",
+    "hard_because": "comparative framing, no 'late'"
+  },
+  {
+    "id": "HO-oos-domain-vocab",
+    "question": "What is the weather forecast for shipping next week?",
+    "expected_type": "out_of_scope",
+    "expected_outcome": "INSUFFICIENT_EVIDENCE",
+    "note": "Mentions 'shipping' but is out of scope. Tests refusal is not fooled by domain vocabulary.",
+    "hard_because": "in-domain words but unanswerable"
+  },
+  {
+    "id": "HO-oos-port",
+    "question": "Tell me about congestion at the Genoa port.",
+    "expected_type": "out_of_scope",
+    "expected_outcome": "INSUFFICIENT_EVIDENCE",
+    "note": "In-domain topic but no port-investigation tool exists. Honest answer is refusal. Boundary case.",
+    "hard_because": "in-domain but no matching investigation type"
+  }
+]

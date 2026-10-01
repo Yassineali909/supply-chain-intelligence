@@ -18,7 +18,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-EVAL_FILE = Path(__file__).parent / "evaluation" / "eval_questions.json"
+import os
+EVAL_FILE = Path(os.environ.get("EVAL_FILE",
+    str(Path(__file__).parent / "evaluation" / "eval_questions.json")))
 
 
 def run_eval(llm_call, database_url, document_root):
