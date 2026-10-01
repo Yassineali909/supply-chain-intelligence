@@ -99,6 +99,19 @@ def _decide(llm_call, question: str, gathered: dict) -> str:
     return action
 
 
+import re as _re
+
+
+def _extract_cause(doc_text: str):
+    """Derive the delay cause from the retrieved document's OWN text, so the answer can
+    never contradict its evidence (the hardcoded-cause bug the LLM judge caught)."""
+    for pat in (r"affected by (.+?),", r"records (.+?) affecting", r"we note (.+?)\."):
+        m = _re.search(pat, doc_text, _re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    return None
+
+
 def _assemble(question, shipment_code, gathered, started, tool_ms) -> AgentResponse:
     traces = gathered["traces"]
     row = gathered.get("shipment")
@@ -131,6 +144,7 @@ def _assemble(question, shipment_code, gathered, started, tool_ms) -> AgentRespo
     direct_doc = gathered.get("direct_doc")
     if direct_doc is not None:
         doc_id = direct_doc["doc_id"]
+        _cause = _extract_cause(str(direct_doc.get("text", ""))) or "an operational incident"
         evidences.append(Evidence(
             evidence_id="EVD-002", source_type=SourceType.DOCUMENT, source_ref=doc_id,
             locator={"chunk_id": f"{doc_id}:C01"},
@@ -139,13 +153,13 @@ def _assemble(question, shipment_code, gathered, started, tool_ms) -> AgentRespo
         ))
         claims.append(Claim(
             claim_id="CLM-002",
-            text=(f"The delay was caused by a customs hold; the incident report identifies "
+            text=(f"The delay was caused by {_cause}; the incident report identifies "
                   f"{direct_doc.get('metadata', {}).get('incident_code', 'the incident')} as the event."),
             claim_type=ClaimType.CAUSAL, support_status=SupportStatus.SUPPORTED,
             evidence_ids=["EVD-002"],
         ))
         answer = (f"Shipment {shipment_code} arrived {row['delay_days']} days late. "
-                  f"The available incident report attributes the delay to a customs hold.")
+                  f"The available incident report attributes the delay to {_cause}.")
         outcome = Outcome.SUPPORTED
     else:
         answer = (f"Shipment {shipment_code} was delayed by {row['delay_days']} days, "
