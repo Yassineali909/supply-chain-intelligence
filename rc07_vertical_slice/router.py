@@ -22,8 +22,9 @@ ROUTER_SYSTEM = """You classify a supply-chain question into exactly one investi
 Types:
 - "shipment": about a specific shipment (e.g. "what happened to shipment SH-4921?")
 - "supplier": about a supplier's performance (e.g. "why is supplier S07 chronically late?")
+- "impact": which customers are affected by a port/route disruption (co-exposure).
 - "out_of_scope": anything else this system cannot investigate.
-Respond with ONLY JSON: {"type": "shipment|supplier|out_of_scope"}. No prose."""
+Respond with ONLY JSON: {"type": "shipment|supplier|impact|out_of_scope"}. No prose."""
 
 
 def _extract_json(text: str) -> dict:
@@ -36,7 +37,15 @@ def _extract_json(text: str) -> dict:
         return {}
 
 
+GRAPH_KEYWORDS = ("congestion", "port", "affected", "co-exposed", "cascade",
+                  "disruption", "impact", "which customers")
+
+
 def _deterministic_type(question: str) -> str:
+    q = question.lower()
+    # graph/impact questions first (they may also mention a port like PORT-GEN)
+    if any(k in q for k in GRAPH_KEYWORDS) and "customer" in q:
+        return "impact"
     if SHIPMENT_RE.search(question):
         return "shipment"
     if SUPPLIER_RE.search(question) or "supplier" in question.lower():
@@ -48,9 +57,9 @@ def classify(llm_call, question: str) -> str:
     det = _deterministic_type(question)
     raw = llm_call(ROUTER_SYSTEM, f"Question: {question}")
     t = _extract_json(raw).get("type", "")
-    if t not in ("shipment", "supplier", "out_of_scope"):
+    if t not in ("shipment", "supplier", "impact", "out_of_scope"):
         return det
-    if det in ("shipment", "supplier") and t == "out_of_scope":
+    if det in ("shipment", "supplier", "impact") and t == "out_of_scope":
         return det
     return t
 
@@ -82,5 +91,9 @@ def investigate(llm_call, database_url, document_root, question: str) -> AgentRe
         m = SUPPLIER_RE.search(question)
         code = m.group(0) if m else "S00"
         return investigate_rc02(database_url, code, question)
+
+    if qtype == "impact":
+        from rc05 import investigate_rc05
+        return investigate_rc05(question)
 
     return _refusal(question)
