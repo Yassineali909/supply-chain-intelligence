@@ -63,3 +63,102 @@ def query_shipment(database_url: str, shipment_code: str, *, evidence_id: str = 
         "elapsed_ms": elapsed_ms,
     }
     return SQLToolResult(evidence_id=evidence_id, query_id=query_id, rows=rows, trace=trace)
+
+
+# ─────────────────────────── RC-02 supplier-investigation queries ───────────────
+# Reusable, parameterized, read-only. The planner chooses which to call; it never
+# writes SQL. "clean" route = does not pass through the congested port (PORT-GEN).
+
+CONGESTED_PORT_CODE = "PORT-GEN"
+
+SUPPLIER_OVERALL_SQL = """
+SELECT
+    sup.code AS supplier_code,
+    COUNT(*) AS shipment_count,
+    ROUND(AVG(s.delay_days), 2) AS avg_delay_days
+FROM shipments AS s
+JOIN purchase_orders AS po ON po.po_id = s.po_id
+JOIN suppliers AS sup ON sup.supplier_id = po.supplier_id
+WHERE sup.code = :supplier_code
+GROUP BY sup.code
+""".strip()
+
+SUPPLIER_BY_ROUTE_CLASS_SQL = """
+SELECT
+    CASE WHEN p.code = :congested_port THEN 'congested' ELSE 'clean' END AS route_class,
+    COUNT(*) AS shipment_count,
+    ROUND(AVG(s.delay_days), 2) AS avg_delay_days
+FROM shipments AS s
+JOIN purchase_orders AS po ON po.po_id = s.po_id
+JOIN suppliers AS sup ON sup.supplier_id = po.supplier_id
+JOIN routes AS r ON r.route_id = s.route_id
+JOIN ports AS p ON p.port_id = r.port_id
+WHERE sup.code = :supplier_code
+GROUP BY route_class
+""".strip()
+
+SUPPLIER_VS_PEERS_CLEAN_SQL = """
+SELECT
+    CASE WHEN sup.code = :supplier_code THEN 'this_supplier' ELSE 'peers' END AS grp,
+    COUNT(*) AS shipment_count,
+    ROUND(AVG(s.delay_days), 2) AS avg_delay_days
+FROM shipments AS s
+JOIN purchase_orders AS po ON po.po_id = s.po_id
+JOIN suppliers AS sup ON sup.supplier_id = po.supplier_id
+JOIN routes AS r ON r.route_id = s.route_id
+JOIN ports AS p ON p.port_id = r.port_id
+WHERE p.code <> :congested_port
+GROUP BY grp
+""".strip()
+
+
+def _run(database_url, sql, params, evidence_id, query_id, tool_call_id):
+    engine = create_engine(database_url, pool_pre_ping=True)
+    started = time.perf_counter()
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(sql), params)
+            rows = [dict(row._mapping) for row in result]
+    finally:
+        engine.dispose()
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    trace = {
+        "tool_call_id": tool_call_id,
+        "tool": "query_database",
+        "query_id": query_id,
+        "sql": sql,
+        "parameters": params,
+        "result_summary": {"row_count": len(rows),
+                           "columns": list(rows[0].keys()) if rows else []},
+        "elapsed_ms": elapsed_ms,
+    }
+    return SQLToolResult(evidence_id=evidence_id, query_id=query_id, rows=rows, trace=trace)
+
+
+def _validate_supplier_code(code: str):
+    if not code or not code.startswith("S") or not code[1:].isdigit():
+        raise ValueError("supplier_code must look like S07")
+
+
+def supplier_overall(database_url, supplier_code, *, evidence_id="EVD-A", query_id="SQL-A"):
+    """Overall shipment count + avg delay for one supplier."""
+    _validate_supplier_code(supplier_code)
+    return _run(database_url, SUPPLIER_OVERALL_SQL,
+                {"supplier_code": supplier_code},
+                evidence_id, query_id, "TC-A")
+
+
+def supplier_by_route_class(database_url, supplier_code, *, evidence_id="EVD-B", query_id="SQL-B"):
+    """Avg delay split into clean vs congested routes for one supplier (de-confounding)."""
+    _validate_supplier_code(supplier_code)
+    return _run(database_url, SUPPLIER_BY_ROUTE_CLASS_SQL,
+                {"supplier_code": supplier_code, "congested_port": CONGESTED_PORT_CODE},
+                evidence_id, query_id, "TC-B")
+
+
+def supplier_vs_peers_clean(database_url, supplier_code, *, evidence_id="EVD-C", query_id="SQL-C"):
+    """Supplier vs all other suppliers, on CLEAN routes only (apples-to-apples)."""
+    _validate_supplier_code(supplier_code)
+    return _run(database_url, SUPPLIER_VS_PEERS_CLEAN_SQL,
+                {"supplier_code": supplier_code, "congested_port": CONGESTED_PORT_CODE},
+                evidence_id, query_id, "TC-C")

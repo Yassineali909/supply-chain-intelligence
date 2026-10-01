@@ -34,6 +34,14 @@ def _extract_delay_days(text: str) -> float | None:
     return None
 
 
+_NUM_DAYS_RE = re.compile(r"(\d+(?:\.\d+)?)\s*days?", re.IGNORECASE)
+
+
+def _extract_all_delay_numbers(text: str) -> list[float]:
+    """All 'N days' figures in text, as floats, in order. Used by the comparative check."""
+    return [float(m) for m in _NUM_DAYS_RE.findall(text)]
+
+
 def _status(value: bool) -> str:
     return "PASS" if value else "FAIL"
 
@@ -126,6 +134,53 @@ def verify_response(response: AgentResponse) -> AgentResponse:
                 type="NUMERIC_CLAIM_MATCHES_SQL",
                 claim_id=claim.claim_id,
                 status=_status(numeric_ok),
+                detail=detail,
+            )
+        )
+
+    # V1b: a COMPARATIVE claim backed by SQL must have BOTH compared figures present in
+    # the SQL evidence, and must state a real gap (the two figures differ). This is how
+    # RC-02's de-confounded "supplier vs peers on clean routes" claim is verified without
+    # overclaiming causation.
+    for claim in response.claims:
+        if claim.claim_type != ClaimType.COMPARATIVE:
+            continue
+        sql_evidence = [
+            evidence_by_id[eid]
+            for eid in claim.evidence_ids
+            if eid in evidence_by_id and evidence_by_id[eid].source_type.value == "SQL"
+        ]
+        if not sql_evidence:
+            continue
+        claim_nums = _extract_all_delay_numbers(claim.text)
+        evidence_nums = set()
+        for ev in sql_evidence:
+            evidence_nums.update(_extract_all_delay_numbers(ev.fact))
+
+        # The two COMPARED base figures must each be grounded in SQL evidence. A third
+        # number may appear in the claim as the DERIVED gap (difference of the two); it
+        # need not be in evidence, but if present it must be arithmetically correct.
+        grounded = [cn for cn in claim_nums if any(abs(cn - en) < 0.01 for en in evidence_nums)]
+        ungrounded = [cn for cn in claim_nums if cn not in grounded]
+
+        base_ok = len(grounded) >= 2
+        has_gap = base_ok and (max(grounded) - min(grounded) > 0.01)
+        gap_val = round(max(grounded) - min(grounded), 2) if base_ok else None
+        derived_ok = all(abs(u - gap_val) < 0.01 for u in ungrounded) if base_ok else False
+
+        comparative_ok = base_ok and has_gap and derived_ok
+        detail = (
+            f"Grounded figures={sorted(grounded)}; derived/ungrounded={sorted(ungrounded)}; "
+            f"expected gap={gap_val}; SQL evidence figures={sorted(evidence_nums)}."
+            if claim_nums else
+            "Could not extract two comparable figures from the claim."
+        )
+        checks.append(
+            VerificationCheck(
+                check_id=f"CHK-COMPARATIVE-{claim.claim_id}",
+                type="COMPARATIVE_CLAIM_MATCHES_SQL",
+                claim_id=claim.claim_id,
+                status=_status(comparative_ok),
                 detail=detail,
             )
         )
