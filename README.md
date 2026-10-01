@@ -1,90 +1,125 @@
-# RC-07 Vertical Slice
+# Supply Chain Intelligence Platform
 
-First agent-phase slice for the MeridianFreight Supply Chain Intelligence project.
+An agentic AI platform that investigates operational supply-chain problems — "what happened to this shipment?", "why is this supplier chronically late?" — by autonomously querying a SQL database and searching operational documents, then returns verified, source-cited answers and refuses to guess when the evidence is insufficient.
 
-Goal:
+Runs fully locally and free using Ollama — no API keys, no cloud cost.
 
-> `What happened to shipment SH-4921?`
+Status: active portfolio project. A multi-capability agent (two investigation types + out-of-scope refusal) runs end-to-end on real generated data, with an objective evaluation harness. Graph traversal, LLM-judged quality scoring, and additional scenarios are in progress.
 
-This slice implements the smallest end-to-end investigation loop supported by the v1
-agent output contract:
+## Why this project is different
 
-```text
-question
-  -> identify shipment
-  -> query_database
-  -> search_documents
-  -> verify_evidence
-  -> AgentResponse
+Anyone can wire an LLM to a database. Three things set this apart:
+
+1. A synthetic world with planted, separable causes. A deterministic generator builds a fictional freight-distribution company (~23,000 rows in PostgreSQL, ~2,700 correlated documents) containing known root-cause scenarios — a chronically-late supplier, seasonal port congestion, a degrading carrier, a downstream-warehouse bottleneck, and a deliberately unexplained delay. Because the answers are planted, accuracy can be measured against ground truth. The causal levers are hidden from the schema the agent sees, so the agent must investigate the delays rather than look up the answer.
+
+2. The LLM plans; deterministic code controls the evidence. The agent uses a local LLM to decide which tools to call and how to route a question, but never to write facts. Evidence is assembled deterministically and gated by a hardened, mutation-tested verifier: every claim must bind to evidence a tool produced, numeric and comparative figures must match their SQL evidence, and a causal claim needs direct documentary support — or the answer is downgraded.
+
+3. It is measured, not asserted. An objective evaluation harness scores routing accuracy, outcome accuracy, and verification integrity against planted ground truth. A separate held-out set with fresh phrasing tests generalization — and surfaced a real scope boundary (documented below) rather than a polished 100%.
+
+## What it does
+
+A single entry point classifies the question and dispatches to the right investigation:
+
+- "What happened to shipment SH-6968?" -> shipment investigation (SQL + documents) -> SUPPORTED, cites the real incident report.
+- "Why is supplier S07 chronically late?" -> supplier investigation (three SQL queries, de-confounded comparison) -> SUPPORTED, with an honest comparative claim.
+- "What is the capital of France?" -> out of scope -> refuses instead of guessing.
+
+Example — the supplier investigation's answer:
+
+```
+Supplier S07 is chronically late: it averages 5.59 days of delay overall. Critically,
+the lateness persists on clean routes that avoid the congested port (5.27 days vs 1.0
+days for peers on the same routes, a 4.27-day gap). Because the gap remains once the
+congested-port factor is removed, this strongly indicates the supplier itself, not its
+routing, is the source of the delays.
 ```
 
-It deliberately does **not** implement Neo4j, Text-to-SQL generation, Qdrant, or a UI.
-Those are downstream capabilities and should be added only when a failing vertical slice
-requires them.
+Note the epistemics: the verified claim is the COMPARATIVE fact (the de-confounded gap); the causal reading stays as careful prose ("strongly indicates", not "proves"), because observational data with one confounder controlled is not proof of causation.
 
-## Important runtime note
+## Architecture
 
-The scaffold is written to run against the project's WSL PostgreSQL and document artifacts,
-but this execution environment does not have your WSL database or LangGraph installation.
-Therefore the code is structured for local project integration; the fixture tests do not
-claim a live database run.
+- PostgreSQL — structured business data (suppliers, orders, shipments, deliveries, incidents), the source of truth. Hidden causal levers stripped from the schema.
+- Deterministic generator — produces correlated data and ~2,700 documents from a single seed; fully reproducible.
+- Router — classifies a question (shipment / supplier / out-of-scope) via the LLM with a deterministic entity-pattern fallback, then dispatches.
+- Investigations — RC-07 (shipment: SQL + document retrieval) and RC-02 (supplier: multi-step de-confounded comparison).
+- Verifier — mutation-tested checks gate every claim before the answer is returned.
+- Evaluation — objective scoreboard (routing / outcome / verification) against planted ground truth, plus a held-out generalization set.
+- (Planned) Neo4j multi-hop traversal; Qdrant semantic search; LLM-as-judge quality layer.
 
-The current web verification attempt also did not return official LangGraph documentation,
-so the LangGraph adapter is intentionally isolated in `langgraph_agent.py`. This keeps any
-future API-version adjustment localized instead of spreading framework assumptions through
-the contract and verification code.
+## Tech stack
 
-## Layout
+Python, PostgreSQL, LangGraph, Ollama (llama3.2, mistral), Pydantic, SQLAlchemy, pytest. Planned: Neo4j, Qdrant.
 
-```text
-rc07_vertical_slice/
-├── agent_contract.py       # Pydantic v1 response/evidence models
-├── document_store.py       # stable JSON document lookup/search adapter
-├── postgres_tool.py        # SQL read-only tool with reproducible trace records
-├── verifier.py             # deterministic contract/evidence verification
-├── rc07.py                 # RC-07 investigation orchestration
-├── langgraph_agent.py      # optional LangGraph wrapper
-├── main.py                 # CLI entry point
-├── fixtures/
-│   └── rc07_document.json
-├── tests/
-│   ├── test_contract.py
-│   └── test_rc07_fixture.py
-├── requirements.txt
-└── .env.example
-```
+## Quickstart
 
-## Local setup
-
-Install the dependencies in your project virtualenv:
+Requires WSL/Linux, Python 3.11+, PostgreSQL, and Ollama.
 
 ```bash
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+ollama pull llama3.2:3b
+export DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/meridian"
+
+# generate the world + load Postgres + write documents
+python -m datagen.run --persist --docs
+
+# run the agent tests and the evaluation scoreboard
+cd rc07_vertical_slice
+python -m pytest tests/ -q            # 26 tests
+python evaluate.py                    # objective scoreboard
+EVAL_FILE=evaluation/heldout_questions.json python evaluate.py   # held-out set
 ```
 
-Set:
+## The planted scenarios
 
-```bash
-DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:5432/meridian
-DOCUMENT_ROOT=../artifacts/documents
-```
+Seven root-cause stories with known answers, chosen to exercise different failure modes:
 
-Then the deterministic fixture mode can be exercised without a database:
+| ID | Story | Tests | Agent status |
+|----|-------|-------|--------------|
+| RC-01 | Port congestion in Q1 | seasonal pattern detection | data only |
+| RC-02 | Supplier chronically late | de-confounding supplier from route | live investigation |
+| RC-03 | Carrier degrading over time | trend vs single-cause | data only |
+| RC-04 | Warehouse capacity bottleneck | stage localization (a trap) | data only |
+| RC-05 | Shared-route co-exposure | multi-hop graph traversal | planned (graph) |
+| RC-06 | Unexplained delay | honest refusal | data only |
+| RC-07 | Isolated customs hold | precise single-entity retrieval | live investigation |
 
-```bash
-python main.py --fixture
-```
+RC-02 is de-confounded so the supplier's effect is measurable independently of the congested route it also uses. RC-04 is a trap: the delay is downstream at the warehouse while the inbound shipment arrived on time. RC-06 has no explanatory document — the correct answer is a refusal.
 
-For the real slice:
+## Measured results
 
-```bash
-python main.py --shipment SH-4921 --database-url "$DATABASE_URL" --document-root "$DOCUMENT_ROOT"
-```
+Objective scoreboard, scored against planted ground truth:
 
-## Contract invariant
+- Dev eval set (5 questions): routing 100%, outcome 100%, verification integrity 100%.
+- Held-out set (5 harder questions, fresh phrasing): routing 100%, outcome 80%.
 
-No final claim may exist without an evidence binding, and no evidence binding may point
-to a non-existent evidence item. The verifier enforces this before allowing `SUPPORTED`.
+The one held-out failure is informative, not hidden: "which of our suppliers is the biggest problem?" routes correctly to a supplier investigation, but names no specific supplier to query, so the agent honestly refuses rather than inventing an answer. This is a documented scope boundary — the system investigates named entities; open-ended ranking is a candidate next capability.
 
-The SQL tool is intentionally read-only for v1. It exposes a narrow parameterized query for
-RC-07 rather than attempting Text-to-SQL prematurely.
+## Engineering notes (measured, not claimed)
+
+- Every planted signal is verified in the data — e.g. the chronically-late supplier shows a 4.27-day gap over peers on clean routes (congested port removed).
+- The verifier is mutation-tested: each check was confirmed to fail when the code it guards is deliberately broken.
+- The agent is robust to a weak local model: routing and tool selection use the LLM but fall back deterministically, and wrong-in-context actions are made structurally unavailable rather than merely discouraged.
+- Bugs caught by testing each layer before the next sits on it: a cross-scenario data collision that would have corrupted the refusal test; a schema-rebuild idempotency bug; an evidence-phrasing mismatch that silently downgraded correct answers; a small-model routing loop; and a comparative-claim check that initially rejected a valid derived figure.
+
+## Project status
+
+Built and verified:
+- Deterministic generator (8 stages, ~23k rows, 16 tables, ~2,700 documents, reproducible)
+- Seven planted root-cause scenarios with verified signals; two live as agent investigations (RC-07, RC-02)
+- PostgreSQL persistence with hidden-lever strip; document pipeline (skeleton -> text -> validate)
+- Agent output contract + hardened, mutation-tested verifier (numeric, comparative, causal, trace, partial)
+- Multi-capability router (shipment / supplier / out-of-scope refusal) on real data
+- Objective evaluation harness + held-out generalization set
+- 26 automated tests
+
+In progress / planned:
+- LLM-as-judge quality layer (faithfulness, answer relevance)
+- RC-06 live refusal through the full agent; Neo4j graph for RC-05 multi-hop
+- Qdrant semantic document search; text-to-SQL for open-ended queries
+- "Find the worst supplier" ranking capability (motivated by the held-out boundary)
+- Lightweight UI showing the agent's tool-call trace
+
+## License
+
+MIT
