@@ -1,0 +1,37 @@
+[
+  {
+    "id": "RC07-direct",
+    "question": "What happened to shipment SH-6968?",
+    "expected_type": "shipment",
+    "expected_outcome": "SUPPORTED",
+    "note": "Real RC-07 customs-hold shipment; direct incident report exists."
+  },
+  {
+    "id": "RC02-supplier",
+    "question": "Why is supplier S07 chronically late?",
+    "expected_type": "supplier",
+    "expected_outcome": "SUPPORTED",
+    "note": "De-confounded: S07 late even on clean routes."
+  },
+  {
+    "id": "OOS-france",
+    "question": "What is the capital of France?",
+    "expected_type": "out_of_scope",
+    "expected_outcome": "INSUFFICIENT_EVIDENCE",
+    "note": "Out of scope; must refuse."
+  },
+  {
+    "id": "OOS-recipe",
+    "question": "How do I bake sourdough bread?",
+    "expected_type": "out_of_scope",
+    "expected_outcome": "INSUFFICIENT_EVIDENCE",
+    "note": "Out of scope; must refuse."
+  },
+  {
+    "id": "RC02-phrasing",
+    "question": "Is supplier S07 performing worse than other suppliers?",
+    "expected_type": "supplier",
+    "expected_outcome": "SUPPORTED",
+    "note": "Supplier question in different phrasing (no 'late' keyword)."
+  }
+]
