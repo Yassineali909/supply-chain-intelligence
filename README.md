@@ -4,7 +4,7 @@ An agentic AI platform that investigates operational supply-chain problems — "
 
 Runs fully locally and free using Ollama — no API keys, no cloud cost.
 
-Status: a multi-capability agent spanning three data sources (SQL, documents, graph) runs end-to-end on real generated data, with a self-validating evaluation harness. 29 automated tests.
+Status: a multi-capability agent spanning three data sources (SQL, documents, graph) runs end-to-end on real generated data, with a self-validating evaluation harness, an interactive UI, and an observability dashboard. 29 automated tests.
 
 ## Why this project is different
 
@@ -25,31 +25,42 @@ A single entry point classifies the question and dispatches to the right investi
 - "Which customers are affected by port congestion through shared routes?" -> graph traversal -> SUPPORTED, finds the co-exposure network.
 - "What is the capital of France?" -> out of scope -> refuses instead of guessing.
 
-The supplier answer shows the epistemics: the verified claim is the de-confounded COMPARATIVE fact (S07 averages 5.27 days on clean routes vs 1.0 for peers, a 4.27-day gap with the congested-port factor removed); the causal reading stays as careful prose ("strongly indicates", not "proves"), because observational data with one confounder controlled is not proof of causation.
+The supplier answer shows the epistemics: the verified claim is the de-confounded COMPARATIVE fact (S07 averages 5.27 days on clean routes vs 1.0 for peers, a 4.27-day gap with the congested-port factor removed); the causal reading stays as careful prose ("strongly indicates", not "proves").
 
-The graph answer is the one SQL cannot produce cleanly: "Congestion at PORT-GEN does not hit one supplier in isolation. 21 customers are co-exposed on route RT-04: each is served by more than one of the suppliers S07, S11, S19, S23, which all pass through PORT-GEN. A disruption there cascades to those customers through multiple suppliers at once." That is a multi-hop traversal across shared nodes — the reason the graph exists.
+The graph answer is the one SQL cannot produce cleanly: "Congestion at PORT-GEN does not hit one supplier in isolation. 21 customers are co-exposed on route RT-04: each is served by more than one of the suppliers S07, S11, S19, S23, which all pass through PORT-GEN." That is a multi-hop traversal across shared nodes — the reason the graph exists.
+
+## Interfaces
+
+Two front-ends make the system usable and legible:
+
+- Streamlit UI — type a question and watch the investigation unfold: the tool-call trace (SQL / documents / graph), the outcome badge, the answer, the evidence it is bound to, and the verification checks. It makes the thing most "chat with your data" demos hide — the verified reasoning path — the centrepiece. `streamlit run app.py`
+- Grafana observability dashboard — every agent run is logged to a Postgres `runs` table; a Grafana dashboard reads it for monitoring: outcome breakdown, investigation-type distribution, verification pass rate, and average latency by investigation type (which visibly shows shipment investigations cost more, because they query SQL and search documents, while others hit a single source).
+
+The distinction is deliberate: Streamlit is the interaction surface; Grafana is the observability layer over the run history.
 
 ## Architecture
 
-- PostgreSQL — structured business data, the source of truth. Hidden causal levers stripped from the schema.
+- PostgreSQL — structured business data, the source of truth. Hidden causal levers stripped from the schema. Also holds the agent `runs` log.
 - Neo4j — a graph projection built FROM Postgres (11,863 nodes, 23,770 relationships), for multi-hop co-exposure questions. Never an independent source of truth.
 - Document store — ~2,700 documents generated from the structured events (skeleton -> text -> validated), so they corroborate the data.
-- Router — classifies a question (shipment / supplier / impact / out-of-scope) via the LLM with a deterministic fallback, then dispatches.
+- Router — classifies a question (shipment / supplier / impact / out-of-scope) via the LLM with a deterministic fallback, then dispatches; logs every run.
 - Verifier — mutation-tested checks (numeric, comparative, causal, trace, partial) gate every claim.
 - Evaluation — objective scoreboard + held-out set + control-gated LLM-as-judge.
+- Interfaces — Streamlit UI (interaction) + Grafana dashboard (observability).
 
 ## Tech stack
 
-Python, PostgreSQL, Neo4j, LangGraph, Ollama (llama3.2, mistral), Pydantic, SQLAlchemy, pytest.
+Python, PostgreSQL, Neo4j, LangGraph, Ollama (llama3.2, mistral), Pydantic, SQLAlchemy, pytest, Streamlit, Grafana.
 
 ## Quickstart
 
-Requires WSL/Linux, Python 3.11+, PostgreSQL, Neo4j, and Ollama.
+Requires WSL/Linux, Python 3.11+, PostgreSQL, Neo4j, Ollama (and Grafana for the dashboard).
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ollama pull llama3.2:3b
+
 export DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/meridian"
 
 # generate the world: Postgres + documents
@@ -58,12 +69,19 @@ python -m datagen.run --persist --docs
 # build the graph projection from Postgres
 python -c "from datagen.run import generate; from datagen.graph_projection import project_graph; project_graph(generate())"
 
-# run tests + the evaluation scoreboard
 cd rc07_vertical_slice
+
+# tests + evaluation
 python -m pytest tests/ -q            # 29 tests
 python evaluate.py                    # objective scoreboard
 python evaluate.py --judge            # + control-gated faithfulness
 EVAL_FILE=evaluation/heldout_questions.json python evaluate.py   # held-out set
+
+# interactive UI
+streamlit run app.py                  # http://localhost:8501
+
+# observability: runs are logged to a Postgres 'runs' table;
+# point a Grafana PostgreSQL datasource at the meridian DB and build panels over it.
 ```
 
 ## The planted scenarios
@@ -94,7 +112,7 @@ Scored against planted ground truth:
 - The verifier is mutation-tested: each check fails when the code it guards is deliberately broken.
 - The LLM judge caught a real bug — the agent asserting a cause ("customs hold") that contradicted its own retrieved document ("carrier delay"). Fixed by deriving the answer's cause from the evidence. The judge's own control test then caught the judge being too lenient; the judge prompt was hardened until the control passed.
 - The graph query was scoped honestly: an initial traversal showed all 30 suppliers use the route (a weak story); the real co-exposure question is scoped to the known problem-network, where 21 customers are genuinely co-exposed.
-- Bugs caught by testing each layer before the next sits on it: a cross-scenario data collision; a schema-rebuild idempotency bug; an evidence-phrasing mismatch that silently downgraded correct answers; a small-model routing loop (fixed by constraining the action space); a comparative-check false rejection of a valid derived figure.
+- Bugs caught by testing each layer before the next sits on it: a cross-scenario data collision; a schema-rebuild idempotency bug; an evidence-phrasing mismatch that silently downgraded correct answers; a small-model routing loop; a comparative-check false rejection of a valid derived figure; and a run-logging key collision that silently dropped most runs until the log was keyed by a surrogate id.
 
 ## Project status
 
@@ -105,12 +123,12 @@ Built and verified:
 - Multi-capability router across three data sources (SQL, documents, graph) + refusal
 - Three live investigations (RC-07, RC-02, RC-05)
 - Self-validating evaluation: objective + held-out + control-gated LLM judge
+- Streamlit interactive UI + Grafana observability dashboard
 - 29 automated tests
 
 In progress / planned:
 - RC-06 live refusal through the full agent
 - "Find the worst supplier" ranking capability (motivated by the held-out boundary)
-- Lightweight UI showing the agent's tool-call trace
 - Text-to-SQL for open-ended queries
 
 ## License
