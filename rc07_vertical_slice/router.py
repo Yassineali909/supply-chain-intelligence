@@ -84,16 +84,21 @@ def investigate(llm_call, database_url, document_root, question: str) -> AgentRe
         from planner import investigate_with_planner
         m = SHIPMENT_RE.search(question)
         code = m.group(0) if m else "SH-0000"
-        return investigate_with_planner(llm_call, database_url, document_root, code, question)
-
-    if qtype == "supplier":
+        resp = investigate_with_planner(llm_call, database_url, document_root, code, question)
+    elif qtype == "supplier":
         from rc02 import investigate_rc02
         m = SUPPLIER_RE.search(question)
         code = m.group(0) if m else "S00"
-        return investigate_rc02(database_url, code, question)
-
-    if qtype == "impact":
+        resp = investigate_rc02(database_url, code, question)
+    elif qtype == "impact":
         from rc05 import investigate_rc05
-        return investigate_rc05(question)
+        resp = investigate_rc05(question)
+    else:
+        resp = _refusal(question)
 
-    return _refusal(question)
+    try:
+        from run_logger import log_run
+        log_run(resp, qtype)
+    except Exception:
+        pass
+    return resp
