@@ -162,3 +162,55 @@ def supplier_vs_peers_clean(database_url, supplier_code, *, evidence_id="EVD-C",
     return _run(database_url, SUPPLIER_VS_PEERS_CLEAN_SQL,
                 {"supplier_code": supplier_code, "congested_port": CONGESTED_PORT_CODE},
                 evidence_id, query_id, "TC-C")
+
+
+# ─────────────────────────── RC-04 warehouse stage-localization queries ─────────
+# The trap: during the demand peak, a capacity-limited warehouse slips on OUTBOUND
+# deliveries while INBOUND shipments arrive normally. A naive agent blames the supplier;
+# the correct answer localizes the delay to the warehouse's outbound stage.
+
+WH_INBOUND_OUTBOUND_SQL = """
+SELECT
+    CASE WHEN EXTRACT(MONTH FROM d.planned_date) IN (6,7) THEN 'peak' ELSE 'non_peak' END AS period,
+    COUNT(*) AS n,
+    ROUND(AVG(sh.delay_days), 2) AS inbound_delay_days,
+    ROUND(AVG(d.delay_days), 2) AS outbound_delay_days
+FROM deliveries AS d
+JOIN shipments AS sh ON sh.shipment_id = d.shipment_id
+JOIN warehouses AS w ON w.warehouse_id = d.warehouse_id
+WHERE w.code = :warehouse_code
+GROUP BY period
+ORDER BY period
+""".strip()
+
+WH_VS_OTHERS_PEAK_SQL = """
+SELECT
+    w.code AS warehouse_code,
+    ROUND(AVG(sh.delay_days), 2) AS inbound_delay_days,
+    ROUND(AVG(d.delay_days), 2) AS outbound_delay_days
+FROM deliveries AS d
+JOIN shipments AS sh ON sh.shipment_id = d.shipment_id
+JOIN warehouses AS w ON w.warehouse_id = d.warehouse_id
+WHERE EXTRACT(MONTH FROM d.planned_date) IN (6,7)
+GROUP BY w.code
+ORDER BY outbound_delay_days DESC
+""".strip()
+
+
+def _validate_warehouse_code(code: str):
+    if not code or not code.startswith("WH-"):
+        raise ValueError("warehouse_code must look like WH-2")
+
+
+def warehouse_inbound_vs_outbound(database_url, warehouse_code, *, evidence_id="EVD-W1", query_id="SQL-W1"):
+    """Inbound (shipment) vs outbound (delivery) delay for one warehouse, peak vs non-peak."""
+    _validate_warehouse_code(warehouse_code)
+    return _run(database_url, WH_INBOUND_OUTBOUND_SQL,
+                {"warehouse_code": warehouse_code},
+                evidence_id, query_id, "TC-W1")
+
+
+def warehouse_vs_others_peak(database_url, *, evidence_id="EVD-W2", query_id="SQL-W2"):
+    """All warehouses' inbound vs outbound delay during the peak (is one uniquely bad outbound?)."""
+    return _run(database_url, WH_VS_OTHERS_PEAK_SQL, {},
+                evidence_id, query_id, "TC-W2")

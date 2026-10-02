@@ -17,6 +17,8 @@ from agent_contract import AgentResponse, Outcome, Verification, Timing
 
 SHIPMENT_RE = re.compile(r"\bSH-\d+\b")
 SUPPLIER_RE = re.compile(r"\bS\d{2,}\b")
+WAREHOUSE_RE = re.compile(r"\bWH-\d+\b")
+WAREHOUSE_KEYWORDS = ("warehouse", "deliveries from", "outbound")
 
 ROUTER_SYSTEM = """You classify a supply-chain question into exactly one investigation type.
 Types:
@@ -46,6 +48,8 @@ def _deterministic_type(question: str) -> str:
     # graph/impact questions first (they may also mention a port like PORT-GEN)
     if any(k in q for k in GRAPH_KEYWORDS) and "customer" in q:
         return "impact"
+    if WAREHOUSE_RE.search(question) or any(k in q for k in WAREHOUSE_KEYWORDS):
+        return "warehouse"
     if SHIPMENT_RE.search(question):
         return "shipment"
     if SUPPLIER_RE.search(question) or "supplier" in question.lower():
@@ -53,13 +57,28 @@ def _deterministic_type(question: str) -> str:
     return "out_of_scope"
 
 
+def _has_strong_pattern(question: str):
+    """Return a type if the question contains an UNAMBIGUOUS entity code, else None.
+    A clear code (WH-2, SH-4921) beats the LLM's guess — a weak model should not override
+    an unambiguous signal (same discipline as constraining the tool-routing loop)."""
+    if WAREHOUSE_RE.search(question):
+        return "warehouse"
+    if SHIPMENT_RE.search(question):
+        return "shipment"
+    return None
+
+
 def classify(llm_call, question: str) -> str:
     det = _deterministic_type(question)
+    # Unambiguous entity code wins over everything, including the LLM.
+    strong = _has_strong_pattern(question)
+    if strong:
+        return strong
     raw = llm_call(ROUTER_SYSTEM, f"Question: {question}")
     t = _extract_json(raw).get("type", "")
-    if t not in ("shipment", "supplier", "impact", "out_of_scope"):
+    if t not in ("shipment", "supplier", "impact", "warehouse", "out_of_scope"):
         return det
-    if det in ("shipment", "supplier", "impact") and t == "out_of_scope":
+    if det in ("shipment", "supplier", "impact", "warehouse") and t == "out_of_scope":
         return det
     return t
 
@@ -93,6 +112,11 @@ def investigate(llm_call, database_url, document_root, question: str) -> AgentRe
     elif qtype == "impact":
         from rc05 import investigate_rc05
         resp = investigate_rc05(question)
+    elif qtype == "warehouse":
+        from rc04 import investigate_rc04
+        m = WAREHOUSE_RE.search(question)
+        code = m.group(0) if m else "WH-2"
+        resp = investigate_rc04(database_url, code, question)
     else:
         resp = _refusal(question)
 
