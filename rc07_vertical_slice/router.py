@@ -19,14 +19,17 @@ SHIPMENT_RE = re.compile(r"\bSH-\d+\b")
 SUPPLIER_RE = re.compile(r"\bS\d{2,}\b")
 WAREHOUSE_RE = re.compile(r"\bWH-\d+\b")
 WAREHOUSE_KEYWORDS = ("warehouse", "deliveries from", "outbound")
+PORT_RE = re.compile(r"\bPORT-[A-Z]+\b")
+PORT_KEYWORDS = ("port", "congestion", "congested")
 
 ROUTER_SYSTEM = """You classify a supply-chain question into exactly one investigation type.
 Types:
 - "shipment": about a specific shipment (e.g. "what happened to shipment SH-4921?")
 - "supplier": about a supplier's performance (e.g. "why is supplier S07 chronically late?")
 - "impact": which customers are affected by a port/route disruption (co-exposure).
+- "port": delays through a specific port / seasonal port congestion, with NO mention of affected customers (e.g. "why are shipments through PORT-GEN delayed in Q1?").
 - "out_of_scope": anything else this system cannot investigate.
-Respond with ONLY JSON: {"type": "shipment|supplier|impact|out_of_scope"}. No prose."""
+Respond with ONLY JSON: {"type": "shipment|supplier|impact|port|out_of_scope"}. No prose."""
 
 
 def _extract_json(text: str) -> dict:
@@ -48,6 +51,10 @@ def _deterministic_type(question: str) -> str:
     # graph/impact questions first (they may also mention a port like PORT-GEN)
     if any(k in q for k in GRAPH_KEYWORDS) and "customer" in q:
         return "impact"
+    # a PORT question WITHOUT customers is a port-delay investigation (RC-01), not graph.
+    # MUST stay AFTER the impact branch above (RC-05 owns port+customer questions).
+    if PORT_RE.search(question) or any(k in q for k in PORT_KEYWORDS):
+        return "port"
     if WAREHOUSE_RE.search(question) or any(k in q for k in WAREHOUSE_KEYWORDS):
         return "warehouse"
     if SHIPMENT_RE.search(question):
@@ -76,9 +83,9 @@ def classify(llm_call, question: str) -> str:
         return strong
     raw = llm_call(ROUTER_SYSTEM, f"Question: {question}")
     t = _extract_json(raw).get("type", "")
-    if t not in ("shipment", "supplier", "impact", "warehouse", "out_of_scope"):
+    if t not in ("shipment", "supplier", "impact", "port", "warehouse", "out_of_scope"):
         return det
-    if det in ("shipment", "supplier", "impact", "warehouse") and t == "out_of_scope":
+    if det in ("shipment", "supplier", "impact", "port", "warehouse") and t == "out_of_scope":
         return det
     return t
 
@@ -117,6 +124,11 @@ def investigate(llm_call, database_url, document_root, question: str) -> AgentRe
         m = WAREHOUSE_RE.search(question)
         code = m.group(0) if m else "WH-2"
         resp = investigate_rc04(database_url, code, question)
+    elif qtype == "port":
+        from rc01 import investigate_rc01
+        m = PORT_RE.search(question)
+        code = m.group(0) if m else "PORT-GEN"
+        resp = investigate_rc01(database_url, code, question)
     else:
         resp = _refusal(question)
 

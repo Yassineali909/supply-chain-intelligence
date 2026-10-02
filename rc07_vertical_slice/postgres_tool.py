@@ -214,3 +214,58 @@ def warehouse_vs_others_peak(database_url, *, evidence_id="EVD-W2", query_id="SQ
     """All warehouses' inbound vs outbound delay during the peak (is one uniquely bad outbound?)."""
     return _run(database_url, WH_VS_OTHERS_PEAK_SQL, {},
                 evidence_id, query_id, "TC-W2")
+
+
+# ─────────────────────────── RC-01 port-congestion queries ──────────────────────
+# RC-01's signal is TEMPORAL: a port's delay spikes in Q1 vs the rest of the year.
+# Like RC-04, the second tool is a cross-entity control — it rules out "Q1 is just
+# slow everywhere" by showing the port is the clear outlier among all ports in Q1.
+# NOTE: quarter is bucketed on planned_departure (the live Q1 figure is ~4.04 on
+# this bucketing; the handoff's ~5.06 was a different slice — do not chase it).
+# Numbers are returned from SQL at runtime, never hardcoded, so the COMPARATIVE
+# claim's base figures always match the evidence the verifier checks.
+
+PORT_DELAY_BY_QUARTER_SQL = """
+SELECT
+    CASE WHEN EXTRACT(QUARTER FROM s.planned_departure) = 1 THEN 'Q1' ELSE 'rest' END AS period,
+    COUNT(*) AS n,
+    ROUND(AVG(s.delay_days), 2) AS avg_delay_days
+FROM shipments AS s
+JOIN routes AS r ON r.route_id = s.route_id
+JOIN ports AS p ON p.port_id = r.port_id
+WHERE p.code = :port_code
+GROUP BY period
+ORDER BY period
+""".strip()
+
+PORT_Q1_VS_OTHERS_SQL = """
+SELECT
+    p.code AS port_code,
+    COUNT(*) AS n_q1,
+    ROUND(AVG(s.delay_days), 2) AS q1_avg_delay_days
+FROM shipments AS s
+JOIN routes AS r ON r.route_id = s.route_id
+JOIN ports AS p ON p.port_id = r.port_id
+WHERE EXTRACT(QUARTER FROM s.planned_departure) = 1
+GROUP BY p.code
+ORDER BY q1_avg_delay_days DESC
+""".strip()
+
+
+def _validate_port_code(code: str):
+    if not code or not code.startswith("PORT-"):
+        raise ValueError("port_code must look like PORT-GEN")
+
+
+def port_delay_by_quarter(database_url, port_code, *, evidence_id="EVD-P1", query_id="SQL-P1"):
+    """One port's avg delay, Q1 vs the rest of the year (the core RC-01 signal)."""
+    _validate_port_code(port_code)
+    return _run(database_url, PORT_DELAY_BY_QUARTER_SQL,
+                {"port_code": port_code},
+                evidence_id, query_id, "TC-P1")
+
+
+def port_q1_vs_others(database_url, *, evidence_id="EVD-P2", query_id="SQL-P2"):
+    """All ports' Q1 avg delay (is this port the clear outlier, or is Q1 slow everywhere?)."""
+    return _run(database_url, PORT_Q1_VS_OTHERS_SQL, {},
+                evidence_id, query_id, "TC-P2")
