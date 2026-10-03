@@ -33,5 +33,40 @@
     "expected_type": "supplier",
     "expected_outcome": "SUPPORTED",
     "note": "Supplier question in different phrasing (no 'late' keyword)."
+  },
+  {
+    "id": "RC06-unexplained",
+    "question": "Why was shipment SH-4493 delayed?",
+    "expected_type": "shipment",
+    "expected_outcome": "INSUFFICIENT_EVIDENCE",
+    "note": "Real RC-06 target: delayed 3 days but NO direct causal document. Agent must report the delay as a verifiable fact yet refuse to assert a cause (honest refusal, not invention)."
+  },
+  {
+    "id": "RC01-port",
+    "question": "Why are shipments through PORT-GEN delayed in Q1?",
+    "expected_type": "port",
+    "expected_outcome": "SUPPORTED",
+    "note": "Seasonal Q1 congestion at PORT-GEN (4.04 vs 1.81 rest); control shows it is the outlier among ports. COMPARATIVE claim."
+  },
+  {
+    "id": "RC03-carrier",
+    "question": "Is carrier CR3 getting worse over time?",
+    "expected_type": "carrier",
+    "expected_outcome": "PARTIALLY_SUPPORTED",
+    "note": "Gradual degradation over 24 months (2.06->4.54) vs flat fleet. TREND claim, legitimately PARTIAL (not a downgrade)."
+  },
+  {
+    "id": "RC04-warehouse",
+    "question": "Why are deliveries from WH-2 slow during the peak?",
+    "expected_type": "warehouse",
+    "expected_outcome": "SUPPORTED",
+    "note": "Stage-localization trap: outbound slips at WH-2 in peak while inbound is normal; rules out the supplier. COMPARATIVE claim."
+  },
+  {
+    "id": "RC05-impact",
+    "question": "Which customers are affected by port congestion through shared routes?",
+    "expected_type": "impact",
+    "expected_outcome": "SUPPORTED",
+    "note": "Multi-hop graph co-exposure via the RT-04 network. RELATIONSHIP claim."
   }
 ]
