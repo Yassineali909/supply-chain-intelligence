@@ -84,7 +84,7 @@
     "question": "How many shipments were carried by CR3?",
     "expected_type": "analytical",
     "expected_outcome": "SUPPORTED",
-    "note": "Row count that NAMES a carrier (CR3). Must still route analytical, NOT the RC-03 carrier scenario, because a count is not a degradation trend. Model resolves CR3 via the carriers table. Ground truth 473.",
-    "hard_because": "entity code CR3 present but it's a count, not the carrier trend scenario — the precedence trap the analytical route was designed to get right"
+    "note": "Row count naming CR3; routes analytical (not the carrier scenario). The 'carried by' phrasing originally made the 3B model draft schema-invalid SQL (crossed table aliases) -> honest refusal, caught by the held-out set at 0/5. Fixed with few-shot exemplars in the drafter prompt; now 5/5 SUPPORTED, ground truth 473.",
+    "hard_because": "entity code present but it's a count, not the carrier trend scenario; phrasing-sensitive SQL drafting that few-shot hardening stabilized"
   }
 ]

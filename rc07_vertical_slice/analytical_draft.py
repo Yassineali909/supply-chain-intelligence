@@ -108,6 +108,16 @@ STRICT RULES:
 - Do not reference system catalogs, information_schema, or any other database.
 - Prefer an explicit aggregate (COUNT/AVG/SUM) when the question asks "how many" or "average".
 - If the question cannot be answered from these tables, output exactly: CANNOT_ANSWER
+
+EXAMPLES (follow these patterns — count from the main fact table, join only to resolve a code, and qualify every column to the table it belongs to):
+Q: How many shipments used carrier CR3?
+SQL: SELECT COUNT(*) FROM shipments s JOIN carriers c ON s.carrier_id = c.carrier_id WHERE c.code = 'CR3'
+Q: How many shipments were carried by CR3?
+SQL: SELECT COUNT(*) FROM shipments s JOIN carriers c ON s.carrier_id = c.carrier_id WHERE c.code = 'CR3'
+Q: How many invoices are disputed?
+SQL: SELECT COUNT(*) FROM invoices WHERE status = 'disputed'
+Q: What is the average delay across all shipments?
+SQL: SELECT AVG(delay_days) FROM shipments
 """
 
 _RETRY_SUFFIX = """
