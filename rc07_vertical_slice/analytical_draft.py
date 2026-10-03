@@ -118,6 +118,8 @@ Q: How many invoices are disputed?
 SQL: SELECT COUNT(*) FROM invoices WHERE status = 'disputed'
 Q: What is the average delay across all shipments?
 SQL: SELECT AVG(delay_days) FROM shipments
+Q: What is the average delay per carrier?
+SQL: SELECT c.code, AVG(s.delay_days) FROM shipments s JOIN carriers c ON s.carrier_id = c.carrier_id GROUP BY c.code
 """
 
 _RETRY_SUFFIX = """
