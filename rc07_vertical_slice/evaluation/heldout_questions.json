@@ -4,7 +4,7 @@
     "question": "Which of our suppliers is the biggest problem?",
     "expected_type": "supplier",
     "expected_outcome": "SUPPORTED",
-    "note": "Supplier ranking question, NO S-code and NO 'late' keyword. Routes to supplier via the LLM, then forks to the ranking capability (no entity named + ranking language). Answered by de-confounded clean-route ranking (S07 worst). This was the held-out BOUNDARY that motivated building the ranking feature \u2014 now a passing case.",
+    "note": "Supplier ranking question, NO S-code and NO 'late' keyword. Routes to supplier via the LLM, then forks to the ranking capability (no entity named + ranking language). Answered by de-confounded clean-route ranking (S07 worst). This was the held-out BOUNDARY that motivated building the ranking feature — now a passing case.",
     "hard_because": "no entity signal; relies on LLM routing + the ranking fork"
   },
   {
@@ -36,7 +36,7 @@
     "question": "Tell me about congestion at the Genoa port.",
     "expected_type": "port",
     "expected_outcome": "INSUFFICIENT_EVIDENCE",
-    "note": "Routes to port by keyword but names a port that does not exist in the world. Must refuse rather than default to PORT-GEN \u2014 this is the held-out case that exposed the confidently-wrong-entity bug (fixed).",
+    "note": "Routes to port by keyword but names a port that does not exist in the world. Must refuse rather than default to PORT-GEN — this is the held-out case that exposed the confidently-wrong-entity bug (fixed).",
     "hard_because": "in-domain port question naming an unknown entity; must not default"
   },
   {
@@ -68,7 +68,23 @@
     "question": "If the main port backs up, which buyers get hit across the shared lane?",
     "expected_type": "impact",
     "expected_outcome": "SUPPORTED",
-    "note": "RC-05 with 'buyers' not 'customers' and 'port backs up' not 'congestion'. Deterministic layer cannot catch 'buyers' \u2014 routing rides on the LLM classifier (confirmed it generalizes).",
+    "note": "RC-05 with 'buyers' not 'customers' and 'port backs up' not 'congestion'. Deterministic layer cannot catch 'buyers' — routing rides on the LLM classifier (confirmed it generalizes).",
     "hard_because": "'buyers' not 'customers'; impact routing carried by the LLM, not the keyword fallback"
+  },
+  {
+    "id": "HO-analytical-count-rephrase",
+    "question": "Across the whole fleet, how many deliveries were recorded?",
+    "expected_type": "analytical",
+    "expected_outcome": "SUPPORTED",
+    "note": "Fresh-phrased row count ('how many deliveries') with no entity. Text-to-SQL drafts COUNT(*) on deliveries; AGGREGATE check matches the SQL value.",
+    "hard_because": "count phrasing with no entity code; must route analytical, not a scenario, and the drafter must pick the right table"
+  },
+  {
+    "id": "HO-analytical-entity-count",
+    "question": "How many shipments were carried by CR3?",
+    "expected_type": "analytical",
+    "expected_outcome": "SUPPORTED",
+    "note": "Row count that NAMES a carrier (CR3). Must still route analytical, NOT the RC-03 carrier scenario, because a count is not a degradation trend. Model resolves CR3 via the carriers table. Ground truth 473.",
+    "hard_because": "entity code CR3 present but it's a count, not the carrier trend scenario — the precedence trap the analytical route was designed to get right"
   }
 ]

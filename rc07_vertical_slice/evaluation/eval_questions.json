@@ -68,5 +68,33 @@
     "expected_type": "impact",
     "expected_outcome": "SUPPORTED",
     "note": "Multi-hop graph co-exposure via the RT-04 network. RELATIONSHIP claim."
+  },
+  {
+    "id": "ANALYTICAL-count-carrier",
+    "question": "How many shipments used carrier CR3?",
+    "expected_type": "analytical",
+    "expected_outcome": "SUPPORTED",
+    "note": "Text-to-SQL count; model resolves CR3 via carriers table. Ground truth 473. Routes analytical despite CR3 (count, not the carrier scenario)."
+  },
+  {
+    "id": "ANALYTICAL-avg-delay",
+    "question": "What is the average delay across all shipments?",
+    "expected_type": "analytical",
+    "expected_outcome": "SUPPORTED",
+    "note": "Text-to-SQL AVG; no entity -> analytical. AGGREGATE check matches full-precision SQL value."
+  },
+  {
+    "id": "ANALYTICAL-count-suppliers",
+    "question": "How many suppliers are there?",
+    "expected_type": "analytical",
+    "expected_outcome": "SUPPORTED",
+    "note": "Text-to-SQL row count. Ground truth 30."
+  },
+  {
+    "id": "ANALYTICAL-count-disputed",
+    "question": "How many invoices are disputed?",
+    "expected_type": "analytical",
+    "expected_outcome": "SUPPORTED",
+    "note": "Text-to-SQL filtered count. Ground truth 144."
   }
 ]
