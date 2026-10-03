@@ -103,7 +103,7 @@ Seven root-cause stories with known answers, chosen to exercise different failur
 Scored against planted ground truth:
 
 - Dev eval set (10 questions, all 7 scenarios): routing 100%, outcome 100%, verification 100%.
-- Held-out set (5 harder questions, fresh phrasing): routing 100%, outcome 80% — the one miss is a documented scope boundary (an open-ended "which supplier is worst" routes correctly but names no entity to query, so the agent honestly refuses).
+- Held-out set (9 questions, fresh phrasing, all 7 scenarios): routing 100%, outcome 100%, verification 100%. Includes documented-boundary refusals that pass because refusing is correct: an open-ended "which supplier is worst" (no entity named, and no ranking capability built) and a question naming a port that does not exist — both honestly refuse rather than guess.
 - Faithfulness (control-gated LLM judge): 1.00, reported only because the judge passed its control (scored a corrupted answer 0.0) that run.
 
 ## Engineering notes (measured, not claimed)

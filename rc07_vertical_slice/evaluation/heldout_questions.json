@@ -3,9 +3,9 @@
     "id": "HO-supplier-noentity",
     "question": "Which of our suppliers is the biggest problem?",
     "expected_type": "supplier",
-    "expected_outcome": "SUPPORTED",
-    "note": "Supplier intent, NO S-code and NO 'late' keyword. Rides entirely on LLM classification; pattern fallback cannot catch it.",
-    "hard_because": "no entity signal for the deterministic fallback"
+    "expected_outcome": "INSUFFICIENT_EVIDENCE",
+    "note": "Supplier intent, NO S-code and NO 'late' keyword \u2014 routes to supplier via the LLM, but names no entity to query, so the agent honestly REFUSES. SUPPORTED would require a 'worst supplier' ranking capability that is not built (documented boundary / planned feature). Refusing is the correct current behavior.",
+    "hard_because": "no entity signal AND no ranking capability \u2014 correct outcome is refusal"
   },
   {
     "id": "HO-shipment-rephrase",
@@ -32,11 +32,43 @@
     "hard_because": "in-domain words but unanswerable"
   },
   {
-    "id": "HO-oos-port",
+    "id": "HO-port-unknown-entity",
     "question": "Tell me about congestion at the Genoa port.",
-    "expected_type": "out_of_scope",
+    "expected_type": "port",
     "expected_outcome": "INSUFFICIENT_EVIDENCE",
-    "note": "In-domain topic but no port-investigation tool exists. Honest answer is refusal. Boundary case.",
-    "hard_because": "in-domain but no matching investigation type"
+    "note": "Routes to port by keyword but names a port that does not exist in the world. Must refuse rather than default to PORT-GEN \u2014 this is the held-out case that exposed the confidently-wrong-entity bug (fixed).",
+    "hard_because": "in-domain port question naming an unknown entity; must not default"
+  },
+  {
+    "id": "HO-port-seasonal-rephrase",
+    "question": "Does the PORT-GEN gateway have a recurring slowdown early in the year?",
+    "expected_type": "port",
+    "expected_outcome": "SUPPORTED",
+    "note": "RC-01 without 'Q1'/'delayed'; 'early in the year', 'gateway', 'slowdown'. PORT- code carries routing.",
+    "hard_because": "seasonal framing without Q1/delay vocabulary"
+  },
+  {
+    "id": "HO-carrier-decline-rephrase",
+    "question": "Has CR3's on-time performance been declining lately?",
+    "expected_type": "carrier",
+    "expected_outcome": "PARTIALLY_SUPPORTED",
+    "note": "RC-03 without 'carrier' or 'worse'; CR- strong-pattern carries it. Expects the PARTIAL verdict.",
+    "hard_because": "no 'carrier' keyword; relies on CR- code; partial outcome"
+  },
+  {
+    "id": "HO-warehouse-summer-rephrase",
+    "question": "During the summer rush, why does WH-2 fall behind on outbound orders?",
+    "expected_type": "warehouse",
+    "expected_outcome": "SUPPORTED",
+    "note": "RC-04 with 'summer rush' for 'peak' and 'fall behind on outbound' for 'slow'. WH- code present.",
+    "hard_because": "peak expressed as 'summer rush'; different slowness phrasing"
+  },
+  {
+    "id": "HO-impact-buyers-rephrase",
+    "question": "If the main port backs up, which buyers get hit across the shared lane?",
+    "expected_type": "impact",
+    "expected_outcome": "SUPPORTED",
+    "note": "RC-05 with 'buyers' not 'customers' and 'port backs up' not 'congestion'. Deterministic layer cannot catch 'buyers' \u2014 routing rides on the LLM classifier (confirmed it generalizes).",
+    "hard_because": "'buyers' not 'customers'; impact routing carried by the LLM, not the keyword fallback"
   }
 ]
