@@ -4,7 +4,7 @@ An agentic AI platform that investigates operational supply-chain problems — "
 
 Runs fully locally and free using Ollama — no API keys, no cloud cost.
 
-Status: a multi-capability agent spanning three data sources (SQL, documents, graph) runs end-to-end on real generated data, with a self-validating evaluation harness, an interactive UI, and an observability dashboard. 29 automated tests.
+Status: a multi-capability agent spanning three data sources (SQL, documents, graph) runs end-to-end on real generated data, with a self-validating evaluation harness, an interactive UI, and an observability dashboard. 39 automated tests.
 
 ## Why this project is different
 
@@ -43,7 +43,7 @@ The distinction is deliberate: Streamlit is the interaction surface; Grafana is 
 - PostgreSQL — structured business data, the source of truth. Hidden causal levers stripped from the schema. Also holds the agent `runs` log.
 - Neo4j — a graph projection built FROM Postgres (11,863 nodes, 23,770 relationships), for multi-hop co-exposure questions. Never an independent source of truth.
 - Document store — ~2,700 documents generated from the structured events (skeleton -> text -> validated), so they corroborate the data.
-- Router — classifies a question (shipment / supplier / impact / out-of-scope) via the LLM with a deterministic fallback, then dispatches; logs every run.
+- Router — classifies a question (shipment / supplier / impact / port / warehouse / carrier / out-of-scope) via the LLM with a deterministic fallback; an unambiguous entity code (SH-/WH-/CR-) beats the LLM's guess. Dispatches and logs every run.
 - Verifier — mutation-tested checks (numeric, comparative, causal, trace, partial) gate every claim.
 - Evaluation — objective scoreboard + held-out set + control-gated LLM-as-judge.
 - Interfaces — Streamlit UI (interaction) + Grafana dashboard (observability).
@@ -72,7 +72,7 @@ python -c "from datagen.run import generate; from datagen.graph_projection impor
 cd rc07_vertical_slice
 
 # tests + evaluation
-python -m pytest tests/ -q            # 29 tests
+python -m pytest tests/ -q            # 39 tests
 python evaluate.py                    # objective scoreboard
 python evaluate.py --judge            # + control-gated faithfulness
 EVAL_FILE=evaluation/heldout_questions.json python evaluate.py   # held-out set
@@ -90,19 +90,19 @@ Seven root-cause stories with known answers, chosen to exercise different failur
 
 | ID | Story | Tests | Agent status |
 |----|-------|-------|--------------|
-| RC-01 | Port congestion in Q1 | seasonal pattern detection | data only |
+| RC-01 | Port congestion in Q1 | seasonal pattern detection | live (SQL) |
 | RC-02 | Supplier chronically late | de-confounding supplier from route | live (SQL) |
-| RC-03 | Carrier degrading over time | trend vs single-cause | data only |
-| RC-04 | Warehouse capacity bottleneck | stage localization (a trap) | data only |
+| RC-03 | Carrier degrading over time | trend vs single-cause | live (SQL, PARTIAL verdict) |
+| RC-04 | Warehouse capacity bottleneck | stage localization (a trap) | live (SQL) |
 | RC-05 | Shared-route co-exposure | multi-hop graph traversal | live (graph) |
-| RC-06 | Unexplained delay | honest refusal | data only |
+| RC-06 | Unexplained delay | honest refusal | live (SQL+docs) |
 | RC-07 | Isolated customs hold | precise single-entity retrieval | live (SQL+docs) |
 
 ## Measured results
 
 Scored against planted ground truth:
 
-- Dev eval set (5 questions): routing 100%, outcome 100%, verification 100%.
+- Dev eval set (10 questions, all 7 scenarios): routing 100%, outcome 100%, verification 100%.
 - Held-out set (5 harder questions, fresh phrasing): routing 100%, outcome 80% — the one miss is a documented scope boundary (an open-ended "which supplier is worst" routes correctly but names no entity to query, so the agent honestly refuses).
 - Faithfulness (control-gated LLM judge): 1.00, reported only because the judge passed its control (scored a corrupted answer 0.0) that run.
 
@@ -121,14 +121,14 @@ Built and verified:
 - PostgreSQL (hidden-lever strip) + Neo4j graph projection + document pipeline
 - Agent output contract + hardened, mutation-tested verifier
 - Multi-capability router across three data sources (SQL, documents, graph) + refusal
-- Three live investigations (RC-07, RC-02, RC-05)
+- Seven live investigations (all scenarios: RC-01 through RC-07)
 - Self-validating evaluation: objective + held-out + control-gated LLM judge
 - Streamlit interactive UI + Grafana observability dashboard
-- 29 automated tests
+- 39 automated tests
 
 In progress / planned:
-- RC-06 live refusal through the full agent
 - "Find the worst supplier" ranking capability (motivated by the held-out boundary)
+- Held-out eval coverage for the four newly-live scenarios
 - Text-to-SQL for open-ended queries
 
 ## License
