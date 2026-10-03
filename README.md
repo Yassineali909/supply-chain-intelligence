@@ -23,7 +23,6 @@ A single entry point classifies the question and dispatches to the right investi
 - "What happened to shipment SH-6968?" -> SQL + document retrieval -> SUPPORTED, cites the real incident report.
 - "Why is supplier S07 chronically late?" -> three SQL queries, a de-confounded comparison -> SUPPORTED, with an honest comparative claim.
 - "Which supplier is the worst?" -> ranks all suppliers by de-confounded clean-route delay -> SUPPORTED, names the worst (S07) with its margin over the field, noting that ranking by raw delay would unfairly blame suppliers for their routing.
-- "Which supplier is the worst?" -> ranks all suppliers by de-confounded clean-route delay -> SUPPORTED, names the worst (S07) with its margin over the field, noting that ranking by raw delay would unfairly blame suppliers for their routing.
 - "Which customers are affected by port congestion through shared routes?" -> graph traversal -> SUPPORTED, finds the co-exposure network.
 - "What is the capital of France?" -> out of scope -> refuses instead of guessing.
 
