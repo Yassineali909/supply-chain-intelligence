@@ -4,7 +4,7 @@ An agentic AI platform that investigates operational supply-chain problems — "
 
 Runs fully locally and free using Ollama — no API keys, no cloud cost.
 
-Status: a multi-capability agent spanning three data sources (SQL, documents, graph) runs end-to-end on real generated data, with a self-validating evaluation harness, an interactive UI, and an observability dashboard. 39 automated tests.
+Status: a multi-capability agent spanning three data sources (SQL, documents, graph) runs end-to-end on real generated data, with a self-validating evaluation harness, an interactive UI, and an observability dashboard. 47 automated tests.
 
 ## Why this project is different
 
@@ -22,6 +22,8 @@ A single entry point classifies the question and dispatches to the right investi
 
 - "What happened to shipment SH-6968?" -> SQL + document retrieval -> SUPPORTED, cites the real incident report.
 - "Why is supplier S07 chronically late?" -> three SQL queries, a de-confounded comparison -> SUPPORTED, with an honest comparative claim.
+- "Which supplier is the worst?" -> ranks all suppliers by de-confounded clean-route delay -> SUPPORTED, names the worst (S07) with its margin over the field, noting that ranking by raw delay would unfairly blame suppliers for their routing.
+- "Which supplier is the worst?" -> ranks all suppliers by de-confounded clean-route delay -> SUPPORTED, names the worst (S07) with its margin over the field, noting that ranking by raw delay would unfairly blame suppliers for their routing.
 - "Which customers are affected by port congestion through shared routes?" -> graph traversal -> SUPPORTED, finds the co-exposure network.
 - "What is the capital of France?" -> out of scope -> refuses instead of guessing.
 
@@ -72,7 +74,7 @@ python -c "from datagen.run import generate; from datagen.graph_projection impor
 cd rc07_vertical_slice
 
 # tests + evaluation
-python -m pytest tests/ -q            # 39 tests
+python -m pytest tests/ -q            # 47 tests
 python evaluate.py                    # objective scoreboard
 python evaluate.py --judge            # + control-gated faithfulness
 EVAL_FILE=evaluation/heldout_questions.json python evaluate.py   # held-out set
@@ -103,7 +105,7 @@ Seven root-cause stories with known answers, chosen to exercise different failur
 Scored against planted ground truth:
 
 - Dev eval set (10 questions, all 7 scenarios): routing 100%, outcome 100%, verification 100%.
-- Held-out set (9 questions, fresh phrasing, all 7 scenarios): routing 100%, outcome 100%, verification 100%. Includes documented-boundary refusals that pass because refusing is correct: an open-ended "which supplier is worst" (no entity named, and no ranking capability built) and a question naming a port that does not exist — both honestly refuse rather than guess.
+- Held-out set (9 questions, fresh phrasing, all 7 scenarios): routing 100%, outcome 100%, verification 100%. Includes a case that honestly refuses because refusing is correct (a question naming a port that does not exist), and the open-ended "which supplier is worst" — once a documented-boundary refusal, now answered by the ranking capability it motivated.
 - Faithfulness (control-gated LLM judge): 1.00, reported only because the judge passed its control (scored a corrupted answer 0.0) that run.
 
 ## Engineering notes (measured, not claimed)
@@ -124,10 +126,9 @@ Built and verified:
 - Seven live investigations (all scenarios: RC-01 through RC-07)
 - Self-validating evaluation: objective + held-out + control-gated LLM judge
 - Streamlit interactive UI + Grafana observability dashboard
-- 39 automated tests
+- 47 automated tests
 
 In progress / planned:
-- "Find the worst supplier" ranking capability (motivated by the held-out boundary)
 - Held-out eval coverage for the four newly-live scenarios
 - Text-to-SQL for open-ended queries
 
