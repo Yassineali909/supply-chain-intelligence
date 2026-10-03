@@ -269,3 +269,76 @@ def port_q1_vs_others(database_url, *, evidence_id="EVD-P2", query_id="SQL-P2"):
     """All ports' Q1 avg delay (is this port the clear outlier, or is Q1 slow everywhere?)."""
     return _run(database_url, PORT_Q1_VS_OTHERS_SQL, {},
                 evidence_id, query_id, "TC-P2")
+
+
+# ─────────────────────────── RC-03 carrier-degradation queries ──────────────────
+# RC-03's signal is a TREND: a carrier's delay climbs GRADUALLY over the 24 months.
+# Unlike RC-01's clean two-bucket gap, this is a noisy monotonic-ish rise — which is
+# exactly why the honest verdict is PARTIALLY_SUPPORTED (a measurable degradation, but
+# no single pinpointable cause). Claim is built from THIRDS (early/mid/late), never from
+# single-month endpoints — one sparse month (e.g. a lone late shipment) must not drive it.
+# Second tool is the fleet control: it rules out "the whole fleet is slowing," so the
+# trend is attributable to THIS carrier. Numbers derived from SQL at runtime, not hardcoded.
+
+CARRIER_THIRDS_SQL = """
+WITH bounds AS (
+    SELECT MIN(planned_departure) AS d0, MAX(planned_departure) AS d1 FROM shipments
+)
+SELECT
+    width_bucket(
+        EXTRACT(EPOCH FROM s.planned_departure),
+        EXTRACT(EPOCH FROM b.d0),
+        EXTRACT(EPOCH FROM b.d1) + 1,
+        3
+    ) AS third,
+    COUNT(*) AS n,
+    ROUND(AVG(s.delay_days), 2) AS avg_delay_days
+FROM shipments AS s
+JOIN carriers AS c ON c.carrier_id = s.carrier_id
+CROSS JOIN bounds b
+WHERE c.code = :carrier_code
+GROUP BY third
+ORDER BY third
+""".strip()
+
+CARRIER_THIRDS_FLEET_SQL = """
+WITH bounds AS (
+    SELECT MIN(planned_departure) AS d0, MAX(planned_departure) AS d1 FROM shipments
+)
+SELECT
+    width_bucket(
+        EXTRACT(EPOCH FROM s.planned_departure),
+        EXTRACT(EPOCH FROM b.d0),
+        EXTRACT(EPOCH FROM b.d1) + 1,
+        3
+    ) AS third,
+    COUNT(*) AS n,
+    ROUND(AVG(s.delay_days), 2) AS avg_delay_days
+FROM shipments AS s
+JOIN carriers AS c ON c.carrier_id = s.carrier_id
+CROSS JOIN bounds b
+WHERE c.code <> :carrier_code
+GROUP BY third
+ORDER BY third
+""".strip()
+
+
+def _validate_carrier_code(code: str):
+    if not code or not code.startswith("CR") or not code[2:].isdigit():
+        raise ValueError("carrier_code must look like CR3")
+
+
+def carrier_delay_by_thirds(database_url, carrier_code, *, evidence_id="EVD-T1", query_id="SQL-T1"):
+    """One carrier's avg delay across early/mid/late thirds of the 24-month window (the trend)."""
+    _validate_carrier_code(carrier_code)
+    return _run(database_url, CARRIER_THIRDS_SQL,
+                {"carrier_code": carrier_code},
+                evidence_id, query_id, "TC-T1")
+
+
+def carrier_thirds_fleet(database_url, carrier_code, *, evidence_id="EVD-T2", query_id="SQL-T2"):
+    """All OTHER carriers' avg delay by third (is the trend carrier-specific or fleet-wide?)."""
+    _validate_carrier_code(carrier_code)
+    return _run(database_url, CARRIER_THIRDS_FLEET_SQL,
+                {"carrier_code": carrier_code},
+                evidence_id, query_id, "TC-T2")
