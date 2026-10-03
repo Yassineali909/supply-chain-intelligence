@@ -342,3 +342,34 @@ def carrier_thirds_fleet(database_url, carrier_code, *, evidence_id="EVD-T2", qu
     return _run(database_url, CARRIER_THIRDS_FLEET_SQL,
                 {"carrier_code": carrier_code},
                 evidence_id, query_id, "TC-T2")
+
+# ─────────────────────────── Supplier-ranking query (de-confounded) ──────────────
+# "Which supplier is the worst?" — ranks ALL suppliers by avg delay on CLEAN routes only
+# (congested port excluded), so the ranking measures each supplier's OWN reliability rather
+# than blaming it for bad routing. Raw-delay ranking would unfairly include route-confounded
+# suppliers (e.g. the RC-05 shared-route group rides high on raw delay alone). The honest
+# "worst" is the de-confounded worst. Returns the top N so the margin over #2 is visible.
+# Reuses the RC-02 congested-port constant.
+
+SUPPLIER_RANKING_CLEAN_SQL = """
+SELECT
+    sup.code AS supplier_code,
+    COUNT(*) AS shipment_count,
+    ROUND(AVG(s.delay_days), 2) AS clean_avg_delay_days
+FROM shipments AS s
+JOIN purchase_orders AS po ON po.po_id = s.po_id
+JOIN suppliers AS sup ON sup.supplier_id = po.supplier_id
+JOIN routes AS r ON r.route_id = s.route_id
+JOIN ports AS p ON p.port_id = r.port_id
+WHERE p.code <> :congested_port
+GROUP BY sup.code
+ORDER BY clean_avg_delay_days DESC
+LIMIT :top_n
+""".strip()
+
+
+def supplier_ranking_clean(database_url, *, top_n=5, evidence_id="EVD-RANK", query_id="SQL-RANK"):
+    """All suppliers ranked by avg delay on clean routes (de-confounded). Top N, worst first."""
+    return _run(database_url, SUPPLIER_RANKING_CLEAN_SQL,
+                {"congested_port": CONGESTED_PORT_CODE, "top_n": top_n},
+                evidence_id, query_id, "TC-RANK")

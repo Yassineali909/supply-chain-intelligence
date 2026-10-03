@@ -3,9 +3,9 @@
     "id": "HO-supplier-noentity",
     "question": "Which of our suppliers is the biggest problem?",
     "expected_type": "supplier",
-    "expected_outcome": "INSUFFICIENT_EVIDENCE",
-    "note": "Supplier intent, NO S-code and NO 'late' keyword \u2014 routes to supplier via the LLM, but names no entity to query, so the agent honestly REFUSES. SUPPORTED would require a 'worst supplier' ranking capability that is not built (documented boundary / planned feature). Refusing is the correct current behavior.",
-    "hard_because": "no entity signal AND no ranking capability \u2014 correct outcome is refusal"
+    "expected_outcome": "SUPPORTED",
+    "note": "Supplier ranking question, NO S-code and NO 'late' keyword. Routes to supplier via the LLM, then forks to the ranking capability (no entity named + ranking language). Answered by de-confounded clean-route ranking (S07 worst). This was the held-out BOUNDARY that motivated building the ranking feature \u2014 now a passing case.",
+    "hard_because": "no entity signal; relies on LLM routing + the ranking fork"
   },
   {
     "id": "HO-shipment-rephrase",

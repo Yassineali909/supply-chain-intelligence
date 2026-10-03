@@ -23,6 +23,7 @@ PORT_RE = re.compile(r"\bPORT-[A-Z]+\b")
 PORT_KEYWORDS = ("port", "congestion", "congested")
 CARRIER_RE = re.compile(r"\bCR\d+\b")
 CARRIER_KEYWORDS = ("carrier",)
+RANKING_KEYWORDS = ("worst", "biggest problem", "which supplier", "rank", "most unreliable")
 
 ROUTER_SYSTEM = """You classify a supply-chain question into exactly one investigation type.
 Types:
@@ -134,10 +135,17 @@ def investigate(llm_call, database_url, document_root, question: str) -> AgentRe
         code = m.group(0) if m else "SH-0000"
         resp = investigate_with_planner(llm_call, database_url, document_root, code, question)
     elif qtype == "supplier":
-        from rc02 import investigate_rc02
+        # fork: a NAMED supplier (S-code) -> RC-02; a ranking question with no name ->
+        # the ranking capability; otherwise refuse (don't run RC-02 on a bogus default).
         m = SUPPLIER_RE.search(question)
-        code = m.group(0) if m else "S00"
-        resp = investigate_rc02(database_url, code, question)
+        if m:
+            from rc02 import investigate_rc02
+            resp = investigate_rc02(database_url, m.group(0), question)
+        elif any(k in question.lower() for k in RANKING_KEYWORDS):
+            from rc_ranking import investigate_supplier_ranking
+            resp = investigate_supplier_ranking(database_url, question)
+        else:
+            resp = _refusal_no_entity(question, "supplier", "S07")
     elif qtype == "impact":
         from rc05 import investigate_rc05
         resp = investigate_rc05(question)
