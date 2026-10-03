@@ -110,6 +110,21 @@ def _refusal(question: str) -> AgentResponse:
     )
 
 
+def _refusal_no_entity(question: str, kind: str, example: str) -> AgentResponse:
+    """Routed to a port/warehouse/carrier investigation by KEYWORD, but no specific entity
+    was named. Refuse rather than silently default to the planted entity — answering about
+    the wrong entity is confidently-wrong output."""
+    return AgentResponse(
+        run_id="RUN-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S"),
+        question=question, outcome=Outcome.INSUFFICIENT_EVIDENCE,
+        answer=(f"This looks like a {kind} question, but I could not identify a specific "
+                f"{kind} to investigate. Please name one (e.g. {example})."),
+        claims=[], evidence=[], tool_trace=[],
+        verification=Verification(status="FAILED", checks=[]),
+        timing=Timing(total_ms=0, tool_ms=0),
+    )
+
+
 def investigate(llm_call, database_url, document_root, question: str) -> AgentResponse:
     qtype = classify(llm_call, question)
 
@@ -127,20 +142,26 @@ def investigate(llm_call, database_url, document_root, question: str) -> AgentRe
         from rc05 import investigate_rc05
         resp = investigate_rc05(question)
     elif qtype == "warehouse":
-        from rc04 import investigate_rc04
         m = WAREHOUSE_RE.search(question)
-        code = m.group(0) if m else "WH-2"
-        resp = investigate_rc04(database_url, code, question)
+        if not m:
+            resp = _refusal_no_entity(question, "warehouse", "WH-2")
+        else:
+            from rc04 import investigate_rc04
+            resp = investigate_rc04(database_url, m.group(0), question)
     elif qtype == "port":
-        from rc01 import investigate_rc01
         m = PORT_RE.search(question)
-        code = m.group(0) if m else "PORT-GEN"
-        resp = investigate_rc01(database_url, code, question)
+        if not m:
+            resp = _refusal_no_entity(question, "port", "PORT-GEN")
+        else:
+            from rc01 import investigate_rc01
+            resp = investigate_rc01(database_url, m.group(0), question)
     elif qtype == "carrier":
-        from rc03 import investigate_rc03
         m = CARRIER_RE.search(question)
-        code = m.group(0) if m else "CR3"
-        resp = investigate_rc03(database_url, code, question)
+        if not m:
+            resp = _refusal_no_entity(question, "carrier", "CR3")
+        else:
+            from rc03 import investigate_rc03
+            resp = investigate_rc03(database_url, m.group(0), question)
     else:
         resp = _refusal(question)
 
