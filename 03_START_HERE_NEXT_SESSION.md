@@ -31,3 +31,20 @@ question — fixed via few-shot, but the class of risk remains and is documented
 (b) Docker Compose one-command stack.
 (c) Demo video (Streamlit + Grafana) — highest-value non-code task.
 (d) Multi-row analytical v2: 3+ column results, numeric-label time-series beyond 2 columns.
+
+## UPDATE (same session, continued): QDRANT VECTOR STORE — built, parity-gated, NOT yet wired
+- qdrant_store.py: QdrantDocumentStore. EXACT lookup via payload filter (preserves RC-06's
+  empty-result refusal) + semantic_search (new). Embedder injected.
+- Real embedder: Ollama nomic-embed-text (768-dim). Index builder: build_qdrant_index.py
+  -> ./qdrant_data (git-ignored). Run needs: pip install qdrant-client; ollama pull nomic-embed-text.
+- PARITY GATE passed on real corpus (2746 docs): exact lookup == JSON store 15/15; all 5
+  RC-06 shipments empty in both. 6 tests. 138 total.
+- NOT wired into investigations yet (deliberate). NEXT, in order:
+  1. Migrate search_documents in rc07.py/planner to QdrantDocumentStore.search_documents
+     (same return shape) — run build_qdrant_index.py parity gate first; keep JSON as fallback.
+  2. Add a "semantic"/document-content question type to the router + a tool using
+     store.semantic_search (e.g. "what do our docs say about customs holds?"). Honest claim
+     type: RELATIONSHIP or a doc-citation claim; verify against retrieved doc text.
+  3. qdrant_data/ is git-ignored; index is rebuilt from docs, not committed.
+- STILL BLOCKED: Docker is a snap package in WSL (no daemon). For Compose: apt remove the
+  snap, install docker.io or Docker Desktop with WSL integration.
