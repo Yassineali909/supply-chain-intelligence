@@ -17,7 +17,7 @@ from agent_contract import (
     ToolTraceEntry,
     Verification,
 )
-from document_store import search_documents
+from document_retrieval import search_documents
 from postgres_tool import query_shipment
 from verifier import verify_response
 
