@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 
 from agent_contract import AgentResponse, Outcome, Verification, Timing
 from analytical import is_analytical_question, investigate_analytical
+from semantic import is_doc_search_question, investigate_doc_search
 
 SHIPMENT_RE = re.compile(r"\bSH-\d+\b")
 SUPPLIER_RE = re.compile(r"\bS\d{2,}\b")
@@ -87,6 +88,8 @@ def _has_strong_pattern(question: str):
 def classify(llm_call, question: str) -> str:
     ql = question.lower()
     _impact = any(k in ql for k in GRAPH_KEYWORDS) and "customer" in ql
+    if is_doc_search_question(question):
+        return "doc_search"
     if not _impact and is_analytical_question(question):
         return "analytical"
     det = _deterministic_type(question)
@@ -175,6 +178,8 @@ def investigate(llm_call, database_url, document_root, question: str) -> AgentRe
         else:
             from rc03 import investigate_rc03
             resp = investigate_rc03(database_url, m.group(0), question)
+    elif qtype == "doc_search":
+        resp = investigate_doc_search(question)
     elif qtype == "analytical":
         resp = investigate_analytical(llm_call, database_url, question)
     else:
