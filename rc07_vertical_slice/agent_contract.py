@@ -19,6 +19,7 @@ class ClaimType(str, Enum):
     TREND = "TREND"
     CAUSAL = "CAUSAL"
     COMPARATIVE = "COMPARATIVE"
+    AGGREGATE = "AGGREGATE"  # a value read directly from an aggregate SQL result (text-to-SQL)
 
 
 class SupportStatus(str, Enum):

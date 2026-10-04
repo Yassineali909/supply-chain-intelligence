@@ -42,6 +42,23 @@ def _extract_all_delay_numbers(text: str) -> list[float]:
     return [float(m) for m in _NUM_DAYS_RE.findall(text)]
 
 
+# A STANDALONE number: not glued to letters, a dot, or a hyphen on either side. This
+# deliberately ignores the digits inside entity codes (CR3, S07, WH-2, PORT-GEN, Q1,
+# SH-4921) so the AGGREGATE check reads only the result value, never a code's digits.
+_VALUE_RE = re.compile(r"(?<![\w.\-])(\d+(?:\.\d+)?)(?!\d)")
+
+
+def _extract_values(text: str) -> list[float]:
+    """All standalone numeric values in text (entity-code digits excluded)."""
+    return [float(m) for m in _VALUE_RE.findall(text)]
+
+
+def _extract_single_value(text: str) -> float | None:
+    """The one standalone value in text, or None if there isn't exactly one (fail closed)."""
+    vals = _extract_values(text)
+    return vals[0] if len(vals) == 1 else None
+
+
 def _status(value: bool) -> str:
     return "PASS" if value else "FAIL"
 
@@ -181,6 +198,47 @@ def verify_response(response: AgentResponse) -> AgentResponse:
                 type="COMPARATIVE_CLAIM_MATCHES_SQL",
                 claim_id=claim.claim_id,
                 status=_status(comparative_ok),
+                detail=detail,
+            )
+        )
+
+    # V1c: an AGGREGATE claim (text-to-SQL analytical result) must carry exactly the
+    # value its SQL evidence produced. This is a TRANSCRIPTION guard: it certifies the
+    # headline number in the claim equals the number the executed query returned, so a
+    # claim can never report a value the SQL did not. It does NOT certify that the SQL
+    # semantically answers the question — that residual risk (the hardest part of threat
+    # #6) is mitigated by surfacing the generated SQL in the evidence locator and the
+    # answer, for audit, not by this check. Day-valued analytical results still use the
+    # NUMERIC check above; AGGREGATE covers counts/sums and other non-day values that the
+    # days-only extractor cannot read (verified: a count marked NUMERIC fails closed).
+    for claim in response.claims:
+        if claim.claim_type != ClaimType.AGGREGATE:
+            continue
+        sql_evidence = [
+            evidence_by_id[eid]
+            for eid in claim.evidence_ids
+            if eid in evidence_by_id and evidence_by_id[eid].source_type.value == "SQL"
+        ]
+        if not sql_evidence:
+            continue
+        claim_val = _extract_single_value(claim.text)
+        evidence_vals = set()
+        for ev in sql_evidence:
+            evidence_vals.update(_extract_values(ev.fact))
+        aggregate_ok = claim_val is not None and any(
+            abs(claim_val - ev) < 1e-9 for ev in evidence_vals
+        )
+        detail = (
+            f"Claim value={claim_val:g}; SQL evidence values={sorted(evidence_vals)}."
+            if claim_val is not None
+            else "Could not deterministically extract one value from the claim."
+        )
+        checks.append(
+            VerificationCheck(
+                check_id=f"CHK-AGGREGATE-{claim.claim_id}",
+                type="AGGREGATE_CLAIM_MATCHES_SQL",
+                claim_id=claim.claim_id,
+                status=_status(aggregate_ok),
                 detail=detail,
             )
         )
