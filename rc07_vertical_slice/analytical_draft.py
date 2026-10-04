@@ -120,6 +120,9 @@ Q: What is the average delay across all shipments?
 SQL: SELECT AVG(delay_days) FROM shipments
 Q: What is the average delay per carrier?
 SQL: SELECT c.code, AVG(s.delay_days) FROM shipments s JOIN carriers c ON s.carrier_id = c.carrier_id GROUP BY c.code
+Q: How many shipments are there per status?
+SQL: SELECT status, COUNT(*) FROM shipments GROUP BY status
+RULE: when the question says "per", "by", "for each", or "breakdown", you MUST GROUP BY that column and SELECT it first, then the aggregate.
 """
 
 _RETRY_SUFFIX = """
