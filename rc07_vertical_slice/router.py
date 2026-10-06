@@ -74,7 +74,7 @@ def _deterministic_type(question: str) -> str:
 
 def _has_strong_pattern(question: str):
     """Return a type if the question contains an UNAMBIGUOUS entity code, else None.
-    A clear code (WH-2, SH-4921) beats the LLM's guess — a weak model should not override
+    A clear code (WH-2, SH-4921) beats the LLM's guess - a weak model should not override
     an unambiguous signal (same discipline as constraining the tool-routing loop)."""
     if WAREHOUSE_RE.search(question):
         return "warehouse"
@@ -121,7 +121,7 @@ def _refusal(question: str) -> AgentResponse:
 
 def _refusal_no_entity(question: str, kind: str, example: str) -> AgentResponse:
     """Routed to a port/warehouse/carrier investigation by KEYWORD, but no specific entity
-    was named. Refuse rather than silently default to the planted entity — answering about
+    was named. Refuse rather than silently default to the planted entity - answering about
     the wrong entity is confidently-wrong output."""
     return AgentResponse(
         run_id="RUN-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S"),
@@ -179,7 +179,7 @@ def investigate(llm_call, database_url, document_root, question: str) -> AgentRe
             from rc03 import investigate_rc03
             resp = investigate_rc03(database_url, m.group(0), question)
     elif qtype == "doc_search":
-        resp = investigate_doc_search(question)
+        resp = investigate_doc_search(question, llm_call=llm_call)
     elif qtype == "analytical":
         resp = investigate_analytical(llm_call, database_url, question)
     else:

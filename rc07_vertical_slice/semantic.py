@@ -1,5 +1,5 @@
 """
-semantic.py — the `doc_search` route: answer document-CONTENT questions via Qdrant semantic
+semantic.py - the `doc_search` route: answer document-CONTENT questions via Qdrant semantic
 search, Option A style.
 
 "What do our documents say about customs holds?" has no ground-truth number and invites the
@@ -7,7 +7,7 @@ classic RAG failure: the model asserting things the documents don't support. So 
 does NOT write the answer here. Vectors RETRIEVE; deterministic code REPORTS exactly what was
 retrieved (doc ids, snippets, similarity scores); the claim is a RELATIONSHIP claim ("these
 documents relate to this query"), which the verifier gates by evidence-binding without ever
-asserting causation. Retrieved docs are CONTEXTUAL (semantic similarity is not causal proof —
+asserting causation. Retrieved docs are CONTEXTUAL (semantic similarity is not causal proof -
 cf. D7). Below a similarity floor it REFUSES rather than return the nearest-but-irrelevant doc
 (the semantic analogue of RC-06).
 
@@ -27,6 +27,7 @@ from agent_contract import (
     SourceType, SupportStatus, Timing, ToolTraceEntry, Verification,
 )
 from verifier import verify_response
+from summary_draft import draft_and_verify_summary
 
 TOP_K = 5
 SCORE_FLOOR = 0.55         # measured: on-topic >=0.72, off-topic <=0.40 (gap is wide); 0.55 sits in it
@@ -73,8 +74,11 @@ def _refuse(question, answer, started):
 
 
 def investigate_doc_search(question: str, *, store=None, top_k: int = TOP_K,
-                           score_floor: float = SCORE_FLOOR) -> AgentResponse:
+                           score_floor: float = SCORE_FLOOR,
+                           summarize: bool = None, llm_call=None) -> AgentResponse:
     started = time.perf_counter()
+    if summarize is None:
+        summarize = os.environ.get('USE_DOC_SUMMARY') == '1'
     store = store if store is not None else _default_store()
     if store is None:
         return _refuse(question,
@@ -120,6 +124,20 @@ def investigate_doc_search(question: str, *, store=None, top_k: int = TOP_K,
         f"(Ranked by semantic similarity. This reports which documents match; it deliberately "
         f"does not synthesize or assert a causal conclusion beyond what the documents are.)")
 
+    summary_trace = None
+    if summarize and llm_call is not None:
+        retrieved_map = {str(d.get('doc_id', f'doc-{i}')): str(d.get('text', ''))
+                         for i, (d, _) in enumerate(relevant)}
+        sres = draft_and_verify_summary(llm_call, question, retrieved_map)
+        if sres.ok:
+            answer = ('Summary (unverified synthesis over the cited documents below): '
+                      + sres.summary + chr(10) + chr(10) + answer)
+            summary_trace = {'status': 'grounded', 'attempts': sres.attempts,
+                             'cited': list(sres.cited_doc_ids)}
+        else:
+            summary_trace = {'status': 'suppressed', 'attempts': sres.attempts,
+                             'reason': sres.reason}
+
     trace = [ToolTraceEntry(
         step=1, tool_call_id="TC-SEM", tool="search_documents",
         purpose="semantic search over the document corpus", status="SUCCESS",
@@ -137,4 +155,10 @@ def investigate_doc_search(question: str, *, store=None, top_k: int = TOP_K,
         purpose="bind the relationship claim to the retrieved documents",
         status="SUCCESS" if verified.verification.status == "PASSED" else "ERROR",
         input={"claim_ids": ["CLM-DOC"]}, output_refs=[]))
+    if summary_trace is not None:
+        verified.tool_trace.append(ToolTraceEntry(
+            step=3, tool_call_id="TC-SUMMARY", tool="search_documents",
+            purpose="grounded summary synthesis (G1-G3 gated)",
+            status="SUCCESS",
+            input=summary_trace, output_refs=[]))
     return verified
