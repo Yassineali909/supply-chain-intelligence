@@ -1,0 +1,10 @@
+venv/
+**/__pycache__/
+**/*.pyc
+.git/
+.gitignore
+rc07_vertical_slice/qdrant_data/
+artifacts/
+*.md
+.pytest_cache/
+**/.DS_Store

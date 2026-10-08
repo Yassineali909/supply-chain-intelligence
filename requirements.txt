@@ -1,17 +1,14 @@
-# --- Generator (Layer 1, current) ---
-numpy>=2.0
-
-# --- Postgres (add when wiring postgres_writer.py) ---
-# psycopg2-binary>=2.9
-# SQLAlchemy>=2.0
-
-# --- LLM prose (add when reaching docs/prose.py) ---
-# ollama>=0.3
-
-# --- Later layers (uncomment when you reach them) ---
-# qdrant-client>=1.7
-# neo4j>=5.0
-# langgraph>=0.2
-# fastapi>=0.110
-# uvicorn>=0.29
-sqlglot
+# Pinned to the known-good versions that pass the 173-test suite (reproducible builds).
+numpy==2.5.3
+pandas==3.0.6
+python-dateutil==2.9.0.post0
+# Postgres: TWO drivers. datagen/postgres_writer.py uses psycopg2; the agent layer uses psycopg v3.
+psycopg2-binary==2.9.13
+psycopg[binary]==3.3.6
+neo4j==6.3.1
+qdrant-client==1.19.1
+requests==2.34.2
+pydantic==2.13.5
+sqlglot==30.21.0
+streamlit==1.64.0
+SQLAlchemy==2.1.1    # used by rc07_vertical_slice/postgres_tool.py

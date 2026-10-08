@@ -1,0 +1,120 @@
+# Supply Chain Intelligence - full stack. One command: docker compose up --build
+# CPU-only Ollama (GPU opt-in: see the commented deploy block on the ollama service).
+services:
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: yassine
+      POSTGRES_PASSWORD: devpass
+      POSTGRES_DB: meridian
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yassine -d meridian"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  neo4j:
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: neo4j/devpass123
+    volumes:
+      - neo4jdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  qdrant:
+    image: qdrant/qdrant
+    volumes:
+      - qdrantdata:/qdrant/storage
+    healthcheck:
+      # qdrant images are distroless-ish; use the TCP port check via bash in the app net instead.
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' 2>/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollamamodels:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    # --- GPU opt-in (requires working NVIDIA Container Toolkit; see README). Uncomment: ---
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # Pull the two models once, then exit. Gates the seed (models must exist before embedding).
+  ollama-init:
+    image: ollama/ollama
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "ollama pull llama3.2:3b && ollama pull nomic-embed-text && echo '[init] models ready'"
+    restart: "no"
+
+  # One-shot: generate data -> Postgres, project -> Neo4j, embed -> Qdrant. Idempotent.
+  seed:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://yassine:devpass@postgres:5432/meridian
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: devpass123
+      QDRANT_URL: http://qdrant:6333
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - ./seed.sh:/app/seed.sh:ro
+    working_dir: /app
+    command: ["bash", "/app/seed.sh"]
+    restart: "no"
+
+  app:
+    build: .
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://yassine:devpass@postgres:5432/meridian
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: devpass123
+      QDRANT_URL: http://qdrant:6333
+      OLLAMA_HOST: http://ollama:11434
+      USE_QDRANT: "1"
+      USE_DOC_SUMMARY: "1"
+    ports:
+      - "8501:8501"
+    command: ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+
+volumes:
+  pgdata:
+  neo4jdata:
+  qdrantdata:
+  ollamamodels:
