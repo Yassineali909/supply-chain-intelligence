@@ -12,7 +12,9 @@ from datetime import datetime, timezone
 
 import psycopg2
 
-LOG_DB = "postgresql://yassine:devpass@localhost:5432/meridian"
+import os as _os
+LOG_DB = _os.environ.get("DATABASE_URL", "postgresql://yassine:devpass@localhost:5432/meridian").replace("postgresql+psycopg://", "postgresql://", 1)
+_STATE = {"schema_ready": False}
 
 RUNS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -45,6 +47,9 @@ def log_run(response, route_type: str, db_url: str = LOG_DB) -> None:
     try:
         tools = [t.tool for t in response.tool_trace]
         total_ms = getattr(getattr(response, "timing", None), "total_ms", None)
+        if not _STATE["schema_ready"]:
+            ensure_schema(db_url)
+            _STATE["schema_ready"] = True
         conn = psycopg2.connect(db_url)
         try:
             with conn, conn.cursor() as cur:

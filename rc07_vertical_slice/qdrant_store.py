@@ -1,15 +1,15 @@
 """
-qdrant_store.py — a Qdrant-backed document store that does TWO things, deliberately kept
+qdrant_store.py - a Qdrant-backed document store that does TWO things, deliberately kept
 separate:
 
-  1. EXACT lookup by shipment code (lookup_by_code / search_documents) — a drop-in for the
+  1. EXACT lookup by shipment code (lookup_by_code / search_documents) - a drop-in for the
      JSON store's search_documents, implemented with a Qdrant PAYLOAD FILTER, not vector
      similarity. This preserves the exactness RC-06 depends on: when no document mentions a
      shipment, the lookup returns [] and the honest INSUFFICIENT_EVIDENCE refusal stands.
      A fuzzy/semantic search here would return the nearest doc even when none is relevant,
-     silently breaking that refusal — so it is intentionally NOT used for this path.
+     silently breaking that refusal - so it is intentionally NOT used for this path.
 
-  2. SEMANTIC search (semantic_search) — a genuinely NEW capability: vector similarity over
+  2. SEMANTIC search (semantic_search) - a genuinely NEW capability: vector similarity over
      document text, for content questions the exact lookup can't answer ("what do our docs
      say about customs holds?"). This is additive; it does not touch the exact-lookup path.
 
@@ -35,6 +35,11 @@ from qdrant_client import QdrantClient, models
 EmbedFn = Callable[[list[str]], list[list[float]]]
 
 _SHIPMENT_CODE_RE = re.compile(r"\bSH-\d+\b")
+
+
+def _default_ollama_host() -> str:
+    import os
+    return os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
 
 def _codes_in(doc: dict[str, Any]) -> list[str]:
@@ -63,6 +68,11 @@ class QdrantDocumentStore:
     @classmethod
     def on_disk(cls, path: str, embed_fn: EmbedFn, vector_size: int, collection: str = "documents"):
         return cls(QdrantClient(path=path), embed_fn, vector_size, collection)
+
+    @classmethod
+    def on_url(cls, url: str, embed_fn: EmbedFn, vector_size: int, collection: str = "documents"):
+        # Qdrant SERVER mode (Docker stack): a shared daemon multiple containers can reach.
+        return cls(QdrantClient(url=url), embed_fn, vector_size, collection)
 
     def _ensure_collection(self, recreate: bool = False) -> None:
         exists = self.client.collection_exists(self.collection)
@@ -101,7 +111,7 @@ class QdrantDocumentStore:
 
     # --- EXACT lookup (RC-06-preserving) ---------------------------------------------
     def lookup_by_code(self, shipment_code: str, limit: int = 5) -> list[dict[str, Any]]:
-        """Documents that mention this exact shipment code. Empty if none — which is the
+        """Documents that mention this exact shipment code. Empty if none - which is the
         signal RC-06 relies on. No vector similarity involved."""
         flt = models.Filter(must=[models.FieldCondition(
             key="codes", match=models.MatchValue(value=shipment_code))])
@@ -154,7 +164,7 @@ def hashing_embedder(dim: int = 32) -> EmbedFn:
 
 
 def bag_of_words_embedder(vocab: list[str]) -> EmbedFn:
-    """Deterministic term-frequency embedder over a fixed vocabulary — gives MEANINGFUL
+    """Deterministic term-frequency embedder over a fixed vocabulary - gives MEANINGFUL
     semantic ranking in tests without any model (a 'customs delay' query lands nearest the
     doc about customs delays)."""
     vocab = [w.lower() for w in vocab]
@@ -172,7 +182,7 @@ def bag_of_words_embedder(vocab: list[str]) -> EmbedFn:
 
 
 def make_ollama_embedder(model: str = "nomic-embed-text",
-                         host: str = "http://localhost:11434") -> EmbedFn:
+                         host: str = None) -> EmbedFn:
     """Real local embedder via Ollama. Requires `ollama pull nomic-embed-text` (768-dim).
     Tries the `ollama` python package, falls back to the REST API."""
     def embed(texts: list[str]) -> list[list[float]]:
@@ -188,7 +198,7 @@ def make_ollama_embedder(model: str = "nomic-embed-text",
             import urllib.request
             for t in texts:
                 req = urllib.request.Request(
-                    f"{host}/api/embeddings",
+                    f"{(host or _default_ollama_host()).rstrip('/')}/api/embeddings",
                     data=_json.dumps({"model": model, "prompt": t}).encode(),
                     headers={"Content-Type": "application/json"})
                 with urllib.request.urlopen(req) as resp:

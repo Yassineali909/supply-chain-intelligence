@@ -1,5 +1,5 @@
 """
-build_qdrant_index.py — index the real document corpus into on-disk Qdrant with a local
+build_qdrant_index.py - index the real document corpus into on-disk Qdrant with a local
 Ollama embedder, then PROVE the exact-lookup path is safe to migrate before anything is
 wired in.
 
@@ -13,7 +13,7 @@ What it does, in order:
   1. Loads every JSON doc from artifacts/documents (via the existing JSON loader).
   2. Embeds each doc's text with Ollama nomic-embed-text and upserts into ./qdrant_data.
   3. PARITY GATE: for a sample of real shipment codes AND the 5 known RC-06 shipments,
-     confirms Qdrant's exact lookup returns the SAME doc_ids as the JSON store — and that
+     confirms Qdrant's exact lookup returns the SAME doc_ids as the JSON store - and that
      the RC-06 shipments return EMPTY in both (the honest-refusal signal). This is the
      safety check that must pass before search_documents is ever pointed at Qdrant.
   4. Demonstrates semantic search (the new capability) on a couple of content queries.
@@ -31,6 +31,8 @@ from qdrant_store import QdrantDocumentStore, make_ollama_embedder
 
 DOC_ROOT = "../artifacts/documents"
 QDRANT_PATH = "./qdrant_data"
+import os as _os
+QDRANT_URL = _os.environ.get("QDRANT_URL")  # set in the Docker stack -> index into the server
 
 # Known RC-06 shipments for the current seed (handoff): they have CONTEXTUAL docs but NO
 # DIRECT doc -> the exact lookup must return EMPTY, which is what RC-06's refusal relies on.
@@ -50,9 +52,12 @@ def main() -> int:
     dim = len(embed(["dimension probe"])[0])
     print(f"  vector size = {dim}")
 
-    store = QdrantDocumentStore.on_disk(QDRANT_PATH, embed, vector_size=dim)
+    if QDRANT_URL:
+        store = QdrantDocumentStore.on_url(QDRANT_URL, embed, vector_size=dim)
+    else:
+        store = QdrantDocumentStore.on_disk(QDRANT_PATH, embed, vector_size=dim)
     print(f"embedding + indexing {len(docs)} docs into {QDRANT_PATH} "
-          f"(Ollama embeds one at a time — this takes a few minutes) ...")
+          f"(Ollama embeds one at a time - this takes a few minutes) ...")
     n = store.index(docs)
     print(f"  indexed {n} points")
 
@@ -87,7 +92,7 @@ def main() -> int:
         print(f"    {code}: json={len(j)} qdrant={len(q)}  {'OK' if empty_both else '**CHECK**'}")
 
     gate = (mismatches == 0 and rc06_ok == len(RC06_CODES))
-    print(f"\nPARITY GATE: {'PASS — safe to migrate search_documents to Qdrant' if gate else 'FAIL — do NOT migrate; investigate mismatches'}")
+    print(f"\nPARITY GATE: {'PASS - safe to migrate search_documents to Qdrant' if gate else 'FAIL - do NOT migrate; investigate mismatches'}")
 
     # ---- semantic search demo (new capability) --------------------------------------
     print("\n=== SEMANTIC SEARCH (new capability) ===")

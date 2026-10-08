@@ -53,13 +53,17 @@ def _run_id() -> str:
 
 def _default_store():
     """Open the on-disk Qdrant store with the Ollama embedder, or None if no index."""
+    url = os.environ.get("QDRANT_URL")
     path = os.environ.get("QDRANT_PATH", "./qdrant_data")
-    if not Path(path).exists():
+    if url is None and not Path(path).exists():
         return None
     try:
         from qdrant_store import QdrantDocumentStore, make_ollama_embedder
-        embed = make_ollama_embedder(os.environ.get("QDRANT_EMBED_MODEL", "nomic-embed-text"))
+        host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        embed = make_ollama_embedder(os.environ.get("QDRANT_EMBED_MODEL", "nomic-embed-text"), host=host)
         dim = len(embed(["dimension probe"])[0])
+        if url:
+            return QdrantDocumentStore.on_url(url, embed, vector_size=dim)
         return QdrantDocumentStore.on_disk(path, embed, vector_size=dim)
     except Exception:
         return None

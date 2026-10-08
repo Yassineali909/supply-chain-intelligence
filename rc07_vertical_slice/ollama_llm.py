@@ -2,8 +2,10 @@
 from __future__ import annotations
 import requests
 
-OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL = "llama3.2:3b"
+import os
+_OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_URL = _OLLAMA_HOST.rstrip("/") + "/api/chat"
+MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 
 
 def ollama_call(system: str, user: str) -> str:

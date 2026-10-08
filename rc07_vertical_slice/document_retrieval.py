@@ -1,5 +1,5 @@
 """
-document_retrieval.py — a thin backend switch for document search.
+document_retrieval.py - a thin backend switch for document search.
 
 Exposes search_documents() with the EXACT signature and return shape the investigations
 already call (rc07.py, planner.py), so swapping it in is a one-line import change and every
@@ -9,10 +9,10 @@ Backend selection (opt-in, reversible, deterministic by default):
   * default (no env var)        -> the JSON directory store (document_store.search_documents)
   * USE_QDRANT=1 + index present -> the Qdrant payload-filter exact lookup (RC-06-safe)
 If USE_QDRANT=1 is set but the index or qdrant-client is missing, it falls back to JSON and
-says so once on stderr, rather than failing — the investigation never breaks over a backend.
+says so once on stderr, rather than failing - the investigation never breaks over a backend.
 
 Why the Qdrant path is safe here: it uses the EXACT payload filter (whole shipment code),
-not vector similarity, so an absent shipment returns [] exactly as the JSON store does —
+not vector similarity, so an absent shipment returns [] exactly as the JSON store does -
 the empty result RC-06's honest refusal depends on. Proven by the parity gate in
 build_qdrant_index.py on the real corpus.
 """
@@ -39,7 +39,7 @@ def _qdrant_enabled() -> bool:
 def _warn_once(msg: str) -> None:
     global _warned
     if not _warned:
-        print(f"[document_retrieval] {msg} — falling back to JSON store.", file=sys.stderr)
+        print(f"[document_retrieval] {msg} - falling back to JSON store.", file=sys.stderr)
         _warned = True
 
 
@@ -48,14 +48,18 @@ def _get_store():
     global _store
     if _store is not None:
         return _store
-    if not Path(_QDRANT_PATH).exists():
+    url = os.environ.get("QDRANT_URL")
+    if url is None and not Path(_QDRANT_PATH).exists():
         _warn_once(f"USE_QDRANT=1 but no index at {_QDRANT_PATH}")
         return None
     try:
         from qdrant_store import QdrantDocumentStore, make_ollama_embedder
         embed = make_ollama_embedder(_EMBED_MODEL)
         dim = len(embed(["dimension probe"])[0])
-        _store = QdrantDocumentStore.on_disk(_QDRANT_PATH, embed, vector_size=dim)
+        if url:
+            _store = QdrantDocumentStore.on_url(url, embed, vector_size=dim)
+        else:
+            _store = QdrantDocumentStore.on_disk(_QDRANT_PATH, embed, vector_size=dim)
         return _store
     except Exception as exc:  # qdrant-client missing, ollama down, etc.
         _warn_once(f"could not open Qdrant store ({type(exc).__name__}: {exc})")
