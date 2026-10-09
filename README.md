@@ -53,6 +53,28 @@ The distinction is deliberate: Streamlit is the interaction surface; Grafana is 
 
 Python, PostgreSQL, Neo4j, LangGraph, Ollama (llama3.2, mistral), Pydantic, SQLAlchemy, pytest, Streamlit, Grafana.
 
+## Quickstart (Docker, one command)
+
+Requires Docker with the Compose plugin. About 8 GB of one-time downloads (images + Ollama models).
+CPU-only by default.
+
+    git clone https://github.com/Yassineali909/supply-chain-intelligence
+    cd supply-chain-intelligence
+    docker compose up --build
+
+First run: Postgres, Neo4j, Qdrant and Ollama start and report healthy, the two models are pulled
+once, then a one-shot seed job generates the data (23k rows, 2.7k documents), projects the graph and
+embeds the documents. The UI is then served at http://localhost:8501. Later runs skip seeding.
+
+Check the whole stack end to end (7 asserted outcomes, including an honest refusal):
+
+    docker compose run --rm --no-deps app python stack_smoke.py
+
+Notes: the credentials in docker-compose.yml (devpass, devpass123) are throwaway demo values - change
+them before any real deployment. For GPU, uncomment the deploy block on the ollama service (needs the
+NVIDIA Container Toolkit). The stack enables the grounded document summary (USE_DOC_SUMMARY=1).
+
+
 ## Quickstart
 
 Requires WSL/Linux, Python 3.11+, PostgreSQL, Neo4j, Ollama (and Grafana for the dashboard).
