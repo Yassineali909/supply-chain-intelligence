@@ -136,3 +136,20 @@ def test_seed_marker_is_not_reachable():
     res = validate_sql("SELECT * FROM _seed_marker")
     assert res.ok is False, "_seed_marker must be blocked (seed bookkeeping)"
     assert "allowlist" in res.reason.lower()
+
+
+# --- function allowlist: dangerous functions that bypass the TABLE allowlist -----------
+# Found by the adversarial pass: functions taking SQL-as-a-string (query_to_xml) or
+# leaking server state (current_setting, version) never appear as Table nodes, so the
+# table allowlist never sees them. The function allowlist (default-deny) is what stops them.
+FUNCTION_BLOCK_CASES = [
+    ("query_to_xml_exec", "SELECT query_to_xml('SELECT * FROM runs', true, false, '')"),
+    ("current_setting",   "SELECT current_setting('data_directory')"),
+    ("version",           "SELECT version()"),
+]
+
+@pytest.mark.parametrize("label,sql", FUNCTION_BLOCK_CASES, ids=[c[0] for c in FUNCTION_BLOCK_CASES])
+def test_dangerous_function_blocked(label, sql):
+    res = validate_sql(sql)
+    assert res.ok is False, f"{label}: expected BLOCK but passed -> {res.safe_sql!r}"
+    assert "function" in (res.reason or "").lower(), f"{label}: reason {res.reason!r}"

@@ -97,6 +97,21 @@ DENIED_FUNCTIONS = frozenset({
     "set_config", "pg_terminate_backend", "pg_cancel_backend",
 })
 
+# Upper-cased mirror of the denylist, for the canonical-name comparison below.
+DENIED_FUNCTIONS_UPPER = frozenset(f.upper() for f in DENIED_FUNCTIONS)
+
+# Layer 3: the FUNCTION allowlist (default-deny), the counterpart to the table allowlist.
+# The analytical drafter emits only aggregates (COUNT/AVG/SUM, and the MIN/MAX siblings).
+# Everything else is refused by default — including every SQL-executing (query_to_xml),
+# introspection (current_setting, version), and filesystem function, present or FUTURE.
+# This closes the class of bypass where a dangerous call rides inside a string ARGUMENT
+# that the table allowlist never inspects. We permit what analytics needs rather than
+# enumerate what an attacker might try. Names are sqlglot canonical (see _canonical_fn_name).
+ALLOWED_FUNCTIONS = frozenset({
+    "COUNT", "AVG", "SUM", "MIN", "MAX",   # aggregates the drafter emits
+    "EXTRACT",                            # temporal grouping (EXTRACT(MONTH FROM ...)) — seasonal analysis
+})
+
 
 # ---------------------------------------------------------------------------
 # Result type
@@ -123,6 +138,14 @@ def _reject(layer: str, reason: str) -> ValidationResult:
 # ---------------------------------------------------------------------------
 # The validator
 # ---------------------------------------------------------------------------
+
+def _canonical_fn_name(fn) -> str:
+    """Function's real name regardless of sqlglot node class, upper-cased.
+    Anonymous -> .name; dedicated classes -> sql_name() (their .name is empty or '*')."""
+    if isinstance(fn, exp.Anonymous):
+        return (fn.name or "").upper()
+    return (fn.sql_name() or "").upper()
+
 
 def validate_sql(
     sql: str,
@@ -196,16 +219,21 @@ def validate_sql(
 
         referenced.append(name)
 
-    # --- Layer 3 (defense-in-depth): dangerous function denylist ---------------------
-    for fn in stmt.find_all(exp.Anonymous):
-        fn_name = (fn.name or "").lower()
-        if fn_name in DENIED_FUNCTIONS:
-            return _reject("L3", f"function '{fn_name}()' is not allowed")
-    # Some dangerous builtins have dedicated nodes rather than Anonymous; catch by name.
+    # --- Layer 3: function allowlist (default-deny) + explicit denylist ---------------
+    # sqlglot names functions inconsistently: Anonymous nodes carry the name in .name,
+    # while dedicated classes (Count, Avg, CurrentVersion, ...) leave .name empty/'*' and
+    # carry it in sql_name(). _canonical_fn_name reads the right one so neither a quirky
+    # builtin class (version() -> CurrentVersion) nor a string-arg exec (query_to_xml)
+    # can slip the gate. Explicit denial wins first (keeps precise reasons for known
+    # threats); anything not in the analytics allowlist is then refused by default.
     for fn in stmt.find_all(exp.Func):
-        fn_name = (getattr(fn, "name", "") or "").lower()
-        if fn_name in DENIED_FUNCTIONS:
-            return _reject("L3", f"function '{fn_name}()' is not allowed")
+        canonical = _canonical_fn_name(fn)
+        if not canonical:
+            continue  # unnamed structural node, nothing to gate
+        if canonical in DENIED_FUNCTIONS_UPPER:
+            return _reject("L3", f"function '{canonical.lower()}()' is not allowed")
+        if canonical not in ALLOWED_FUNCTIONS:
+            return _reject("L3", f"function '{canonical.lower()}' is not in the allowed set")
 
     # --- Layer 4: force a LIMIT (preserve a smaller one, cap a larger/absent one) -----
     stmt = _enforce_limit(stmt, max_limit)
