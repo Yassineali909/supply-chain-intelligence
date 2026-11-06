@@ -108,3 +108,31 @@ def test_cte_name_is_not_mistaken_for_a_forbidden_table():
     assert res.ok
     assert "recent" not in res.referenced_tables  # internal name, not a business table
     assert res.referenced_tables == ("shipments",)
+
+
+# --- allowlist membership: real business tables reachable, infra tables not -------------
+# Pins the allowlist against two regressions neither existing case-table caught:
+#  (1) a real business table silently MISSING (-> valid question refused)
+#  (2) the `runs` run-log or _seed_marker silently ADDED (-> LLM reads agent/infra data)
+
+ALLOWLISTED_BUSINESS_TABLES = ["product_categories", "supplier_contracts"]
+
+
+@pytest.mark.parametrize("table", ALLOWLISTED_BUSINESS_TABLES)
+def test_real_business_table_is_reachable(table):
+    res = validate_sql(f"SELECT COUNT(*) FROM {table}")
+    assert res.ok is True, f"{table}: expected PASS but blocked -> {res.reason!r}"
+    assert table in res.safe_sql.lower()
+
+
+def test_runs_log_is_not_reachable():
+    # `runs` exists in the live DB but is agent infrastructure, excluded BY DESIGN.
+    res = validate_sql("SELECT * FROM runs")
+    assert res.ok is False, "runs must be blocked (agent run-log, not business data)"
+    assert "allowlist" in res.reason.lower()
+
+
+def test_seed_marker_is_not_reachable():
+    res = validate_sql("SELECT * FROM _seed_marker")
+    assert res.ok is False, "_seed_marker must be blocked (seed bookkeeping)"
+    assert "allowlist" in res.reason.lower()

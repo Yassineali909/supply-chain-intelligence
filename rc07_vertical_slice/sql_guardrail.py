@@ -54,11 +54,11 @@ MAX_LIMIT = 1000
 
 # Layer 3: the business-data allowlist. Nothing else is reachable.
 #
-# !!! CONFIRM AGAINST THE REAL SCHEMA BEFORE SHIPPING !!!
-# The handoff says the DB has 16 tables; the 14 below are the ones visible in the
-# architecture doc. Populate the remaining ones from the live DB with:
-#     SELECT table_name FROM information_schema.tables
-#     WHERE table_schema = 'public' ORDER BY table_name;
+# Confirmed against the live DB (18 tables total): the 16 business tables below are the
+# 18 minus `_seed_marker` (seed bookkeeping) and `runs` (agent run-log). The hidden-lever
+# columns (reliability_tier, perf_trend, congestion_season, incidents.root_cause_id) were
+# reconfirmed ABSENT from the live schema (information_schema.columns -> 0 rows), so
+# text-to-SQL cannot reach them.
 # Deliberately EXCLUDED: the `runs` log table (agent infrastructure, not business data —
 # the analytical path must not let the LLM query our own run history) and every hidden-
 # lever column, which are already stripped from the schema upstream.
@@ -77,7 +77,8 @@ BUSINESS_TABLES = frozenset({
     "invoices",
     "incidents",
     "supplier_performance",
-    # TODO(confirm): the remaining business tables to reach 16 (e.g. demand?). Add here.
+    "product_categories",   # confirmed live: 8 rows
+    "supplier_contracts",   # confirmed live: 30 rows
 })
 
 # Schemas a table is allowed to live in. Anything else (pg_catalog, information_schema,
