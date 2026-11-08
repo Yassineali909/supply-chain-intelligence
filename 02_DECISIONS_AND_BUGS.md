@@ -87,6 +87,17 @@ refusal (the semantic analogue of RC-06).
 
 ---
 
+### D23. L3 function gate: denylist -> default-deny ALLOWLIST (evolves D15/D16)
+D15's L3 paired the table allowlist with a function DENYLIST. B22 showed a denylist cannot
+cover functions that execute SQL from a string ARGUMENT - the dangerous call never appears as a
+name you thought to deny. Flipped the function half to a default-deny ALLOWLIST
+(COUNT/AVG/SUM/MIN/MAX + EXTRACT - exactly what the drafter emits), mirroring the table
+allowlist: permit what analytics needs, refuse everything else present or FUTURE. The denylist
+is kept as an inner check so known threats keep their precise reasons. Same D6 principle (code
+controls what the LLM can reach), now applied to functions. sqlglot names functions
+inconsistently (Anonymous -> .name; dedicated classes like Count/CurrentVersion -> sql_name(),
+with .name empty or '*'), so a _canonical_fn_name helper reads the right attribute per node.
+
 ## PART B — REAL BUGS HIT & HOW THEY WERE FIXED
 
 ### B1–B16 (earlier sessions — still the standard)
@@ -151,6 +162,33 @@ then locked with a test. (D22, B21 together are a strong interview story.)
   repo, and duplicate names get a ` (1)` suffix. Copy across with `cp` and VERIFY by content
   (grep for a distinctive symbol), not by filename. Strip CRLF with `sed -i 's/\r$//'`.
 - `ollama pull nomic-embed-text` (~274MB, 768-dim) is required for the Qdrant embedder.
+
+### B22. A string-argument function bypassed the table allowlist (adversarial pass, post-27/27)
+D15 reported 27/27 adversarial cases correct - but those covered dangerous NAMES. A later probe
+pass found 3 that bypass by MECHANISM: `query_to_xml('SELECT * FROM runs', ...)` executes SQL
+inside a string argument that never parses as a Table node, so the table allowlist never sees
+`runs` - it reached the run-log and any table despite the allowlist. (`current_setting`/`version`
+also leaked server state.) All 3 reached the DB under the read-only transaction (they are reads,
+so L1 did not stop them). Fixed structurally via D23's function allowlist. THEN the full suite
+caught the fix was too tight - it refused a legitimate `EXTRACT(MONTH FROM ...)` seasonal query -
+BEFORE commit; added EXTRACT. Lesson: an allowlist's value is that it is tight enough to break a
+real query if mis-sized, surfacing the capability/safety tension a denylist hides. attack_guardrail.py
++ tests now pin all 3. (A real "my adversarial pass found a live hole in my own boundary" story.)
+
+### B23. Manual paste-edits silently did not land (B19/B20 family)
+Several source edits "ran without error" but never reached the file; tests then failed against
+UNPATCHED source, costing round-trips - same class as B19 (a green-looking state hiding reality).
+Fix (now standard): apply edits via Python heredoc with `assert old in src` - it applies cleanly
+or stops LOUDLY, never a silent no-op. Cousin of B10 (prefer small edits that report success).
+
+### B24. A monkeypatch mutation that silently did not mutate
+Mutation-testing the allowlist, a probe reassigned the module global `BUSINESS_TABLES` to "break"
+the check - but `validate_sql`'s default arg captured the ORIGINAL frozenset at def-time, so the
+mutation did not apply and the test LOOKED guarded when the probe had changed nothing. Caught by
+the result contradicting the prediction (expected red, got green). Fix: mutate REAL SOURCE (edit
+the frozenset in the file, run the real test, confirm red, revert) - which did bite. Lesson: a
+monkeypatch mutation can fail to mutate (default-arg/import capture); the trustworthy mutation
+edits the file, per B19's "green from real source, not a proxy".
 
 ---
 

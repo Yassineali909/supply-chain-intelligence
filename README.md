@@ -4,7 +4,7 @@ An agentic AI platform that investigates operational supply-chain problems — "
 
 Runs fully locally and free using Ollama — no API keys, no cloud cost.
 
-Status: a multi-capability agent spanning three data sources (SQL, documents, graph) runs end-to-end on real generated data, with a self-validating evaluation harness, an interactive UI, and an observability dashboard. 47 automated tests.
+Status: a multi-capability agent spanning three data sources (SQL, documents, graph) runs end-to-end on real generated data, with a self-validating evaluation harness, an interactive UI, and an observability dashboard. 186 automated tests.
 
 ## Why this project is different
 
@@ -95,7 +95,7 @@ python -c "from datagen.run import generate; from datagen.graph_projection impor
 cd rc07_vertical_slice
 
 # tests + evaluation
-python -m pytest tests/ -q            # 47 tests
+python -m pytest tests/ -q            # 186 tests
 python evaluate.py                    # objective scoreboard
 python evaluate.py --judge            # + control-gated faithfulness
 EVAL_FILE=evaluation/heldout_questions.json python evaluate.py   # held-out set
@@ -147,11 +147,17 @@ Built and verified:
 - Seven live investigations (all scenarios: RC-01 through RC-07)
 - Self-validating evaluation: objective + held-out + control-gated LLM judge
 - Streamlit interactive UI + Grafana observability dashboard
-- 47 automated tests
+- 186 automated tests
 
-In progress / planned:
-- Held-out eval coverage for the four newly-live scenarios
-- Text-to-SQL for open-ended queries
+Also built and verified (previously listed as planned):
+- Held-out eval coverage across all seven scenarios (fresh phrasing, incl. correct refusals)
+- Text-to-SQL for open-ended analytical queries, behind a five-layer guardrail
+- Security-hardened guardrail: default-deny table AND function allowlists. An adversarial
+  pass found and closed a string-argument execution bypass (query_to_xml reaching tables the
+  allowlist was meant to block); the function gate is now default-deny, not a denylist.
+
+Remaining:
+- Demo walkthrough (Streamlit UI + Grafana dashboard)
 
 ## License
 
