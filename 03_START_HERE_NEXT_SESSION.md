@@ -12,11 +12,11 @@ trust the repo if they disagree (then update these docs).
 cd ~/supply-chain-intelligence
 git --no-pager log --oneline -12          # should show the text-to-SQL + qdrant + semantic commits
 git status -s -b                          # expect clean, up to date with origin/main
-cd rc07_vertical_slice && python -m pytest tests/ -q | tail -1   # EXPECT: 156 passed
+cd rc07_vertical_slice && python -m pytest tests/ -q | tail -1   # EXPECT: 186 passed
 python -c "import json; print('dev', len(json.load(open('evaluation/eval_questions.json'))), '| heldout', len(json.load(open('evaluation/heldout_questions.json'))))"   # EXPECT: dev 14 | heldout 11
 ```
 
-If the test count isn't 156 or git isn't clean, STOP and reconcile before building (B19/B20:
+If the test count isn't 186 or git isn't clean, STOP and reconcile before building (B19/B20:
 a green/flat count can hide a gap). Also verify a CLEAN CLONE builds if you touched committed
 files last time: `cd /tmp && rm -rf vc && git clone -q <repo> vc && cd vc/rc07_vertical_slice && python -m pytest tests/ -q | tail -1`.
 
@@ -63,7 +63,7 @@ PARITY GATE: PASS (exact lookup == JSON 15/15; all 5 RC-06 shipments empty in bo
 
 ```bash
 cd ~/supply-chain-intelligence/rc07_vertical_slice
-python -m pytest tests/ -q                   # 156 passed
+python -m pytest tests/ -q                   # 186 passed
 python evaluate.py                           # dev: routing 14/14, outcome 14/14, verify 10/10
 EVAL_FILE=evaluation/heldout_questions.json python evaluate.py   # held-out: 11/11, 11/11, 8/8
 python sql_executor.py                       # Layer 1/4: bypassed write rejected + timeout aborts
@@ -82,7 +82,7 @@ streamlit run app.py                         # http://localhost:8501
 ## 5. EXACT CURRENT STATE (as of end of the text-to-SQL + Qdrant session)
 - 7 scenarios + ranking + **text-to-SQL (scalar + grouped)** + **semantic doc_search** = LIVE.
 - Routes: shipment / supplier / impact / port / warehouse / carrier / analytical / doc_search / out_of_scope.
-- 156 tests. Dev 14/14, held-out 11/11. Verified green from a clean clone. All committed + pushed.
+- 186 tests. Dev 14/14, held-out 11/11. Verified green from a clean clone. All committed + pushed.
 - Qdrant WIRED behind `USE_QDRANT=1` (exact lookup, RC-06-preserving, parity-proven live);
   `doc_search` semantic route LIVE (floor 0.55, measured). Claim type **AGGREGATE** added.
 - Latest commits (capabilities, newest-ish first): semantic doc_search route; wire Qdrant via
